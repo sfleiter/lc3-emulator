@@ -9,8 +9,7 @@ struct Memory {
 
 impl Memory {
     fn new() -> Self {
-        let mut data = Vec::with_capacity(crate::hardware::MEMORY_SIZE);
-        unsafe { data.set_len(MEMORY_SIZE) };
+        let data = vec![0x0u8; MEMORY_SIZE];
         Self {
             data
         }
@@ -40,8 +39,9 @@ impl Emulator {
     }
 
     pub fn load_program(&mut self, program: &[u8]) -> Result<(), &'static str>  {
-        let program = self.memory.load_program(program)?;
+        let _program = self.memory.load_program(program)?;
         // TODO read Opcodes and data
+        // TODO tests
         Ok(())
     }
 }
