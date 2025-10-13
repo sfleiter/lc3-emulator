@@ -47,9 +47,14 @@ impl Memory {
 pub struct Emulator {
     memory: Memory,
 }
-
+impl Default for Emulator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl Emulator {
     /// Constructor method, all parameters according to spec.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             memory: Memory::new(),
