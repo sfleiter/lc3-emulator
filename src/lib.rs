@@ -6,7 +6,7 @@
 //!
 //!  # Example
 //! ```
-//! use lc3_emulator::hardware::Emulator;
+//! use lc3_emulator::emulator::Emulator;
 //! let mut emu = Emulator::new();
 //! let instructions = emu.load_program(&vec![0x3000u16].into_boxed_slice()).unwrap();
 //! assert_eq!(instructions.count(), 0);
@@ -16,7 +16,5 @@
 //! - Program not loaded at byte offset `0x3000`
 //! - Program too long
 
-pub mod hardware;
-
-pub use hardware::Emulator;
-
+pub mod emulator;
+pub(crate) mod hardware;

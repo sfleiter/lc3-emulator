@@ -1,4 +1,4 @@
-use lc3_emulator::hardware::Emulator;
+use lc3_emulator::emulator::Emulator;
 
 fn main()  -> Result<(), String> {
     let mut emu = Emulator::new();
