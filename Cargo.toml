@@ -9,3 +9,4 @@ nursery = "warn"
 # cargo = "warn"
 
 [dependencies]
+thiserror = "2.0.17"

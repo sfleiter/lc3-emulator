@@ -18,3 +18,4 @@
 
 pub mod emulator;
 pub(crate) mod hardware;
+pub mod errors;

@@ -1,4 +1,6 @@
 use std::slice::Iter;
+use crate::errors::Lc3EmulatorError;
+use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
 use crate::hardware::Memory;
 
 /// The public facing emulator used to run LC-3 programs.
@@ -28,13 +30,13 @@ impl Emulator {
     /// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
     /// - Program not loaded at byte offset `0x3000`
     /// - Program too long
-    pub fn load_program(&mut self, program: &[u16]) -> Result<Iter<'_, u16>, String> {
+    pub fn load_program(&mut self, program: &[u16]) -> Result<Iter<'_, u16>, Lc3EmulatorError> {
         if program.is_empty() {
-            return Err("Program is missing valid .ORIG header".into());
+            return Err(ProgramMissingOrigHeader);
         }
         let (header, rest) = program.split_at(1);
         if header[0] != 0x3000 {
-            let result = Err(format!("Program is not loaded at '0x3000' but 0x{:016x}", header[0]));
+            let result = Err(ProgramLoadedAtWrongAddress {actual_address: header[0], expected_address: 0x3000});
             return result;
         }
         let instructions = self.memory.load_program(rest)?;
@@ -55,8 +57,8 @@ mod tests {
     #[test]
     pub fn test_load_program_empty() {
         let mut emu = Emulator::new();
-        emu.load_program(&vec![].into_boxed_slice())
-            .expect_err("Loading empty program without .ORIG header should fail");
+        assert_eq!(emu.load_program(&vec![].into_boxed_slice()).unwrap_err().to_string(),
+            "Program is missing valid .ORIG header");
     }
     #[test]
     pub fn test_load_program_minimal() {
@@ -75,9 +77,10 @@ mod tests {
     #[test]
     pub fn test_load_program_too_large() {
         let mut emu = Emulator::new();
-        let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER + 1];
+        let mut program =
+            vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER + 1];
         program[0] = HEADER;
-        let _ = emu.load_program(program.as_slice())
-            .expect_err("Loading too large program should fail");
+        assert_eq!(emu.load_program(program.as_slice()).unwrap_err().to_string(),
+            "Program too long, got 26369 u16 instructions while limit is 26368");
     }
 }

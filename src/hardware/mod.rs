@@ -1,4 +1,6 @@
 use std::slice::Iter;
+use crate::errors::Lc3EmulatorError;
+use crate::errors::Lc3EmulatorError::ProgramTooLong;
 
 const _PROGRAM_SECTION_START_BYTES: usize = 0x3000;
 const PROGRAM_SECTION_START_U16: usize = _PROGRAM_SECTION_START_BYTES / 2;
@@ -30,9 +32,10 @@ impl Memory {
     ///
     /// # Errors
     /// - Program too long
-    pub fn load_program<'mem>(&'mem mut self, data: &[u16]) -> Result<Iter<'mem, u16>, &'static str> {
+    pub fn load_program(&mut self, data: &[u16]) -> Result<Iter<'_, u16>, Lc3EmulatorError> {
         if data.len() > PROGRAM_SECTION_MAX_INSTRUCTION_COUNT {
-            return Err("Program too long");
+            return Err(ProgramTooLong { actual_instructions: data.len(),
+                maximum_instructions: PROGRAM_SECTION_MAX_INSTRUCTION_COUNT });
         }
         self.instruction_count = data.len();
         let program_slice =
