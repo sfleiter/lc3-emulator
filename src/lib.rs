@@ -8,7 +8,8 @@
 //! ```
 //! use lc3_emulator::emulator::Emulator;
 //! let mut emu = Emulator::new();
-//! let instructions = emu.load_program(&vec![0x3000u16].into_boxed_slice()).unwrap();
+//! let program = vec![0x3000u16];
+//! let instructions = emu.load_program(&program).unwrap();
 //! assert_eq!(instructions.count(), 0);
 //! ```
 //! # Errors
@@ -17,5 +18,5 @@
 //! - Program too long
 
 pub mod emulator;
-pub(crate) mod hardware;
 pub mod errors;
+pub(crate) mod hardware;
