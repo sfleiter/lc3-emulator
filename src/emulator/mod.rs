@@ -1,7 +1,26 @@
-use std::slice::Iter;
+use std::fmt::Debug;
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
 use crate::hardware::Memory;
+
+#[derive(Debug)]
+pub struct Instruction {
+    opcode: u8,
+    dr: u8,
+    pc_offset: u16,
+}
+
+impl TryFrom<u16> for Instruction {
+    type Error = Lc3EmulatorError;
+
+    fn try_from(bits: u16) -> Result<Self, Self::Error> {
+        // format: OOOO_DDD_P_PPPP_PPPP
+        let opcode = (bits >> 12) as u8;
+        let dr = (bits >> 9) as u8 & 0b111;
+        let pc_offset = bits & 0b1_1111_1111;
+        Ok(Self { opcode, dr, pc_offset })
+    }
+}
 
 /// The public facing emulator used to run LC-3 programs.
 pub struct Emulator {
@@ -30,7 +49,9 @@ impl Emulator {
     /// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
     /// - Program not loaded at byte offset `0x3000`
     /// - Program too long
-    pub fn load_program(&mut self, program: &[u16]) -> Result<Iter<'_, u16>, Lc3EmulatorError> {
+    pub fn load_program(&mut self, program: &[u16]) -> Result<
+        impl ExactSizeIterator<Item=Instruction> + Debug, Lc3EmulatorError> {
+
         if program.is_empty() {
             return Err(ProgramMissingOrigHeader);
         }
@@ -39,10 +60,11 @@ impl Emulator {
             let result = Err(ProgramLoadedAtWrongAddress {actual_address: header[0], expected_address: 0x3000});
             return result;
         }
-        let instructions = self.memory.load_program(rest)?;
-        // TODO read Opcodes and data
-        // TODO tests
-        Ok(instructions)
+        Ok(self.memory.load_program(rest)?
+            .map(|bits| Instruction::try_from(*bits))
+            .collect::<Result<Vec<Instruction>,_>>()?
+            .into_iter()
+        )
     }
 }
 
@@ -61,10 +83,15 @@ mod tests {
             "Program is missing valid .ORIG header");
     }
     #[test]
-    pub fn test_load_program_minimal() {
+    pub fn test_load_program_short() {
         let mut emu = Emulator::new();
-        let instructions = emu.load_program(&vec![HEADER].into_boxed_slice()).unwrap();
-        assert_eq!(instructions.len(), 0);
+        let program = vec![HEADER, 0b0111_010_010101010].into_boxed_slice(); // LEA
+        let mut instructions = emu.load_program(&program).unwrap();
+        assert_eq!(instructions.len(), 1);
+        let instruction = instructions.next().unwrap();
+        assert_eq!(instruction.opcode, 0b111);
+        assert_eq!(instruction.dr, 0b010);
+        assert_eq!(instruction.pc_offset, 0b010101010);
     }
     #[test]
     pub fn test_load_program_max_size() {
