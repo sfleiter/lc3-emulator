@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-
+#[rustfmt::skip]
 #[derive(Error, Debug)]
 pub enum Lc3EmulatorError {
     #[error("Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}")]
