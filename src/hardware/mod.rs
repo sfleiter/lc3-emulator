@@ -2,8 +2,8 @@ use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::ProgramTooLong;
 use std::slice::Iter;
 
-const _PROGRAM_SECTION_START_BYTES: usize = 0x3000;
-const PROGRAM_SECTION_START_U16: usize = _PROGRAM_SECTION_START_BYTES / 2;
+pub const PROGRAM_SECTION_START_BYTES: u16 = 0x3000;
+const PROGRAM_SECTION_START_U16: usize = PROGRAM_SECTION_START_BYTES as usize / 2;
 const _PROGRAM_SECTION_END_BYTES: usize = 0xFDFF;
 const PROGRAM_SECTION_END_U16: usize = _PROGRAM_SECTION_END_BYTES / 2;
 pub const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT: usize =

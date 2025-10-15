@@ -1,6 +1,6 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
-use crate::hardware::Memory;
+use crate::hardware::{Memory, PROGRAM_SECTION_START_BYTES};
 use std::fmt::Debug;
 
 #[derive(Debug)]
@@ -61,10 +61,10 @@ impl Emulator {
             return Err(ProgramMissingOrigHeader);
         }
         let (header, rest) = program.split_at(1);
-        if header[0] != 0x3000 {
+        if header[0] != PROGRAM_SECTION_START_BYTES {
             let result = Err(ProgramLoadedAtWrongAddress {
                 actual_address: header[0],
-                expected_address: 0x3000,
+                expected_address: PROGRAM_SECTION_START_BYTES,
             });
             return result;
         }
@@ -80,11 +80,11 @@ impl Emulator {
 #[cfg(test)]
 mod tests {
     use crate::emulator::Emulator;
-    use crate::hardware::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
+    use crate::hardware::{PROGRAM_SECTION_MAX_INSTRUCTION_COUNT, PROGRAM_SECTION_START_BYTES};
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT + 1;
-    const HEADER: u16 = 0x3000u16;
+    const HEADER: u16 = PROGRAM_SECTION_START_BYTES;
     #[test]
     pub fn test_load_program_empty() {
         let mut emu = Emulator::new();
