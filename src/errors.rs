@@ -1,3 +1,4 @@
+use std::io;
 use thiserror::Error;
 
 #[rustfmt::skip]
@@ -9,6 +10,8 @@ pub enum Lc3EmulatorError {
     ProgramTooShort { actual_instructions: usize, minimum_instructions: usize },
     #[error("Program is missing valid .ORIG header")]
     ProgramMissingOrigHeader,
-    #[error("Program is not loaded at 0x{expected_address:0x?}' but 0x{actual_address:0x?}")]
+    #[error("Program is not loaded at 0x{expected_address:04X?}' but 0x{actual_address:04X?}")]
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
+    #[error(transparent)]
+    IoError(#[from] io::Error)
 }
