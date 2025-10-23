@@ -28,8 +28,6 @@ impl Memory {
     /// starting from address `_PROGRAM_SECTION_START_BYTES`
     /// and returns an iterator over the loaded instructions.
     ///
-    /// TODO Should this return the iter or have a separate method for repetitive calls?
-    ///
     /// # Errors
     /// - Program too long
     pub fn load_program(&mut self, data: &[u16]) -> Result<(), Lc3EmulatorError> {

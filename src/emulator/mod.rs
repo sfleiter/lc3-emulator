@@ -50,12 +50,15 @@ impl Emulator {
     fn load_program(
         &mut self,
         // pass by value since former owner does not need data and to allow copy_from_slice
-        program: Vec<u16>,
+        mut program: Vec<u16>,
     ) -> Result<(), Lc3EmulatorError> {
+        for item in &mut program {
+            *item = switch_endianess(*item);
+        }
         let Some((header, rest)) = program.split_at_checked(1) else {
             return Err(ProgramMissingOrigHeader);
         };
-        if header[0] != PROGRAM_SECTION_START_BYTES {
+        if header[0] != switch_endianess(PROGRAM_SECTION_START_BYTES) {
             let result = Err(ProgramLoadedAtWrongAddress {
                 actual_address: header[0],
                 expected_address: PROGRAM_SECTION_START_BYTES,
@@ -80,21 +83,16 @@ impl Emulator {
     /// - Program too long
     pub fn load_program_from_file(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
         let file = File::open(path)?;
-        let fs = file.metadata()?.len();
+        let size = file.metadata()?.len();
         // one u16 equals 2 bytes plus 2 bytes for the .ORIG section
-        let mut program: Vec<u16> = Vec::with_capacity(fs as usize / 2 + 2);
+        let mut file_data: Vec<u8> = Vec::with_capacity(size as usize + 2);
         let mut reader = BufReader::new(file);
-        let mut buf = [0u8; 2];
-        loop {
-            let bytes = reader.read(&mut buf)?;
-            match bytes {
-                0 => break,
-                2 => program.push(byte_order_to_little(buf)),
-                1 => todo!("Not implemented"),
-                _ => unreachable!(),
-            }
-        }
-        self.load_program(program)
+        reader.read_to_end(file_data.as_mut())?;
+        let final_data = file_data
+            .chunks(2)
+            .map(|x| (u16::from(x[0]) << 8) | u16::from(x[1]))
+            .collect();
+        self.load_program(final_data)
     }
 
     pub fn instructions(
@@ -102,9 +100,9 @@ impl Emulator {
     ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
         Ok(self
             .memory
-            .program_slice()
+            .program_slice()?
             .iter()
-            .map(|bits| Instruction::try_from(bits[0]))
+            .map(|bits| Instruction::try_from(*bits))
             .collect::<Result<Vec<Instruction>, _>>()?
             .into_iter())
     }
@@ -112,14 +110,14 @@ impl Emulator {
 
 #[inline]
 #[cfg(target_endian = "little")]
-const fn byte_order_to_little(data: [u8; 2]) -> u16 {
-    // eprintln!("data: 0x{:02X?}{:02X?}", data[0], data[1]);
-    data[0] as u16 | (data[1] as u16) << 8
+const fn switch_endianess(data: u16) -> u16 {
+    // eprintln!("data: 0x{:04X?}", data);
+    data.rotate_right(8)
 }
 #[inline]
 #[cfg(target_endian = "big")]
-const fn byte_order_to_little(data: [u8; 2]) -> u16 {
-    data[1] as u16 | (data[0] as u16) << 8
+const fn switch_endianess(data: u16) -> u16 {
+    data
 }
 
 #[cfg(test)]
@@ -144,7 +142,7 @@ mod tests {
     #[test]
     pub fn test_load_program_short() {
         let mut emu = Emulator::new();
-        let program = vec![HEADER, 0b0111_010_010101010]; // LEA
+        let program = vec![HEADER, 0b10101010_0111_010_0]; // LEA
         emu.load_program(program).unwrap();
         let mut instructions = emu.instructions().unwrap();
         assert_eq!(instructions.len(), 1);
@@ -158,12 +156,8 @@ mod tests {
         let mut emu = Emulator::new();
         emu.load_program_from_file("examples/hello_world.o")
             .unwrap();
-        let mut instructions = emu.instructions().unwrap();
-        assert_eq!(instructions.len(), 1);
-        let instruction = instructions.next().unwrap();
-        assert_eq!(instruction.opcode, 0b111);
-        assert_eq!(instruction.dr, 0b010);
-        assert_eq!(instruction.pc_offset, 0b1010_1010);
+        let instructions = emu.instructions().unwrap();
+        assert_eq!(instructions.len(), 15);
     }
     #[test]
     pub fn test_load_program_max_size() {
