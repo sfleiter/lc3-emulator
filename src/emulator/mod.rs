@@ -51,7 +51,7 @@ impl Emulator {
         &mut self,
         // pass by value since former owner does not need data and to allow copy_from_slice
         program: Vec<u16>,
-    ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
+    ) -> Result<(), Lc3EmulatorError> {
         let Some((header, rest)) = program.split_at_checked(1) else {
             return Err(ProgramMissingOrigHeader);
         };
@@ -62,12 +62,7 @@ impl Emulator {
             });
             return result;
         }
-        Ok(self
-            .memory
-            .load_program(rest)?
-            .map(|bits| Instruction::try_from(*bits))
-            .collect::<Result<Vec<Instruction>, _>>()?
-            .into_iter())
+        self.memory.load_program(rest)
     }
 
     /// Loads a program from disk into the memory section starting from
@@ -76,7 +71,6 @@ impl Emulator {
     ///
     /// # Parameters
     /// - `path` defines the location of the LC-3 object file to execute
-    /// TODO Should this return the iter or have a separate method for repetitive calls?
     ///
     /// #  Errors
     /// - See [`Lc3EmulatorError`]
@@ -84,10 +78,7 @@ impl Emulator {
     /// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
     /// - Program not loaded at byte offset `0x3000`
     /// - Program too long
-    pub fn load_program_from_file(
-        &mut self,
-        path: &str,
-    ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
+    pub fn load_program_from_file(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
         let file = File::open(path)?;
         let fs = file.metadata()?.len();
         // one u16 equals 2 bytes plus 2 bytes for the .ORIG section
@@ -104,6 +95,18 @@ impl Emulator {
             }
         }
         self.load_program(program)
+    }
+
+    pub fn instructions(
+        &self,
+    ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
+        Ok(self
+            .memory
+            .program_slice()
+            .iter()
+            .map(|bits| Instruction::try_from(bits[0]))
+            .collect::<Result<Vec<Instruction>, _>>()?
+            .into_iter())
     }
 }
 
@@ -128,7 +131,7 @@ mod tests {
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT + 1;
     const HEADER: u16 = PROGRAM_SECTION_START_BYTES;
     #[test]
-    pub fn test_load_program_empty() {
+    pub fn test_load_program_missing_header() {
         let mut emu = Emulator::new();
         assert_eq!(
             emu.load_program(Vec::with_capacity(0))
@@ -142,7 +145,20 @@ mod tests {
     pub fn test_load_program_short() {
         let mut emu = Emulator::new();
         let program = vec![HEADER, 0b0111_010_010101010]; // LEA
-        let mut instructions = emu.load_program(program).unwrap();
+        emu.load_program(program).unwrap();
+        let mut instructions = emu.instructions().unwrap();
+        assert_eq!(instructions.len(), 1);
+        let instruction = instructions.next().unwrap();
+        assert_eq!(instruction.opcode, 0b111);
+        assert_eq!(instruction.dr, 0b010);
+        assert_eq!(instruction.pc_offset, 0b1010_1010);
+    }
+    #[test]
+    pub fn test_load_program_disk_hello() {
+        let mut emu = Emulator::new();
+        emu.load_program_from_file("examples/hello_world.o")
+            .unwrap();
+        let mut instructions = emu.instructions().unwrap();
         assert_eq!(instructions.len(), 1);
         let instruction = instructions.next().unwrap();
         assert_eq!(instruction.opcode, 0b111);
@@ -154,7 +170,8 @@ mod tests {
         let mut emu = Emulator::new();
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
         program[0] = HEADER;
-        let instructions = emu.load_program(program).unwrap();
+        emu.load_program(program).unwrap();
+        let instructions = emu.instructions().unwrap();
         assert_eq!(instructions.len(), PROGRAM_SECTION_MAX_INSTRUCTION_COUNT);
     }
     #[test]
