@@ -53,12 +53,12 @@ impl Emulator {
         mut program: Vec<u16>,
     ) -> Result<(), Lc3EmulatorError> {
         for item in &mut program {
-            *item = switch_endianess(*item);
+            *item = switch_endianness(*item);
         }
         let Some((header, rest)) = program.split_at_checked(1) else {
             return Err(ProgramMissingOrigHeader);
         };
-        if header[0] != switch_endianess(PROGRAM_SECTION_START_BYTES) {
+        if header[0] != switch_endianness(PROGRAM_SECTION_START_BYTES) {
             let result = Err(ProgramLoadedAtWrongAddress {
                 actual_address: header[0],
                 expected_address: PROGRAM_SECTION_START_BYTES,
@@ -110,13 +110,13 @@ impl Emulator {
 
 #[inline]
 #[cfg(target_endian = "little")]
-const fn switch_endianess(data: u16) -> u16 {
+const fn switch_endianness(data: u16) -> u16 {
     // eprintln!("data: 0x{:04X?}", data);
     data.rotate_right(8)
 }
 #[inline]
 #[cfg(target_endian = "big")]
-const fn switch_endianess(data: u16) -> u16 {
+const fn switch_endianness(data: u16) -> u16 {
     data
 }
 
@@ -142,6 +142,7 @@ mod tests {
     #[test]
     pub fn test_load_program_short() {
         let mut emu = Emulator::new();
+        // format: OOOO_DDD_P_PPPP_PPPP
         let program = vec![HEADER, 0b10101010_0111_010_0]; // LEA
         emu.load_program(program).unwrap();
         let mut instructions = emu.instructions().unwrap();

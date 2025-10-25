@@ -1,8 +1,9 @@
+use std::fmt::{Debug, Display, Formatter};
 use std::io;
 use thiserror::Error;
 
 #[rustfmt::skip]
-#[derive(Error, Debug)]
+#[derive(Error)]
 pub enum Lc3EmulatorError {
     #[error("Program not loaded yet")]
     ProgramNotLoaded,
@@ -14,4 +15,10 @@ pub enum Lc3EmulatorError {
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
     #[error(transparent)]
     IoError(#[from] io::Error)
+}
+
+impl Debug for Lc3EmulatorError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self, f)
+    }
 }

@@ -1,10 +1,7 @@
 use lc3_emulator::emulator::Emulator;
+use lc3_emulator::errors::Lc3EmulatorError;
 
-fn main() {
+fn main() -> Result<(), Lc3EmulatorError> {
     let mut emu = Emulator::new();
-    let res = emu.load_program_from_file("examples/hello_world.o");
-    match res {
-        Ok(()) => (),
-        Err(e) => eprintln!("Error: {e}"),
-    }
+    emu.load_program_from_file("examples/hello_world.o")
 }
