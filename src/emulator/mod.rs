@@ -4,6 +4,9 @@ use crate::hardware::{Memory, PROGRAM_SECTION_START_BYTES};
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, Read};
+use std::ptr::from_mut;
+
+const ORIG_HEADER: u16 = switch_endian_bytes(PROGRAM_SECTION_START_BYTES);
 
 #[derive(Debug)]
 pub struct Instruction {
@@ -46,19 +49,15 @@ impl Emulator {
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
-    fn load_program(
+    fn load_program_from_memory(
         &mut self,
         // pass by value since former owner does not need data and to allow copy_from_slice
-        mut program: Vec<u16>,
+        program: &[u16],
     ) -> Result<(), Lc3EmulatorError> {
-        for item in &mut program {
-            *item = switch_endianness(*item);
-        }
         let Some((header, rest)) = program.split_at_checked(1) else {
             return Err(ProgramMissingOrigHeader);
         };
-        if header[0] != switch_endianness(PROGRAM_SECTION_START_BYTES) {
+        if header[0] != ORIG_HEADER {
             let result = Err(ProgramLoadedAtWrongAddress {
                 actual_address: header[0],
                 expected_address: PROGRAM_SECTION_START_BYTES,
@@ -81,18 +80,20 @@ impl Emulator {
     /// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
     /// - Program not loaded at byte offset `0x3000`
     /// - Program too long
-    pub fn load_program_from_file(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
+    pub fn load_program(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
         let file = File::open(path)?;
         let size = file.metadata()?.len();
         // one u16 equals 2 bytes plus 2 bytes for the .ORIG section
         let mut file_data: Vec<u8> = Vec::with_capacity(size as usize + 2);
         let mut reader = BufReader::new(file);
         reader.read_to_end(file_data.as_mut())?;
-        let final_data = file_data
-            .chunks(2)
-            .map(|x| (u16::from(x[0]) << 8) | u16::from(x[1]))
-            .collect();
-        self.load_program(final_data)
+        let final_data: &mut [u16] = unsafe {
+            &mut *core::ptr::slice_from_raw_parts_mut(
+                from_mut::<[u8]>(file_data.as_mut_slice()).cast::<u16>(),
+                file_data.len() / 2,
+            )
+        };
+        self.load_program_from_memory(final_data)
     }
 
     pub fn instructions(
@@ -110,29 +111,28 @@ impl Emulator {
 
 #[inline]
 #[cfg(target_endian = "little")]
-const fn switch_endianness(data: u16) -> u16 {
+const fn switch_endian_bytes(data: u16) -> u16 {
     // eprintln!("data: 0x{:04X?}", data);
     data.rotate_right(8)
 }
 #[inline]
 #[cfg(target_endian = "big")]
-const fn switch_endianness(data: u16) -> u16 {
+const fn switch_endian_bytes(data: u16) -> u16 {
     data
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::emulator::Emulator;
-    use crate::hardware::{PROGRAM_SECTION_MAX_INSTRUCTION_COUNT, PROGRAM_SECTION_START_BYTES};
+    use crate::emulator::{Emulator, ORIG_HEADER};
+    use crate::hardware::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT + 1;
-    const HEADER: u16 = PROGRAM_SECTION_START_BYTES;
     #[test]
     pub fn test_load_program_missing_header() {
         let mut emu = Emulator::new();
         assert_eq!(
-            emu.load_program(Vec::with_capacity(0))
+            emu.load_program_from_memory(Vec::with_capacity(0).as_mut_slice())
                 .unwrap_err()
                 .to_string(),
             "Program is missing valid .ORIG header"
@@ -142,9 +142,9 @@ mod tests {
     #[test]
     pub fn test_load_program_short() {
         let mut emu = Emulator::new();
-        // format: OOOO_DDD_P_PPPP_PPPP
-        let program = vec![HEADER, 0b10101010_0111_010_0]; // LEA
-        emu.load_program(program).unwrap();
+        let mut program = vec![ORIG_HEADER, 0b0111_010_010101010_]; // LEA
+        emu.load_program_from_memory(program.as_mut_slice())
+            .unwrap();
         let mut instructions = emu.instructions().unwrap();
         assert_eq!(instructions.len(), 1);
         let instruction = instructions.next().unwrap();
@@ -155,8 +155,7 @@ mod tests {
     #[test]
     pub fn test_load_program_disk_hello() {
         let mut emu = Emulator::new();
-        emu.load_program_from_file("examples/hello_world.o")
-            .unwrap();
+        emu.load_program("examples/hello_world.o").unwrap();
         let instructions = emu.instructions().unwrap();
         assert_eq!(instructions.len(), 15);
     }
@@ -164,8 +163,9 @@ mod tests {
     pub fn test_load_program_max_size() {
         let mut emu = Emulator::new();
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
-        program[0] = HEADER;
-        emu.load_program(program).unwrap();
+        program[0] = ORIG_HEADER;
+        emu.load_program_from_memory(program.as_mut_slice())
+            .unwrap();
         let instructions = emu.instructions().unwrap();
         assert_eq!(instructions.len(), PROGRAM_SECTION_MAX_INSTRUCTION_COUNT);
     }
@@ -173,9 +173,11 @@ mod tests {
     pub fn test_load_program_too_large() {
         let mut emu = Emulator::new();
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER + 1];
-        program[0] = HEADER;
+        program[0] = ORIG_HEADER;
         assert_eq!(
-            emu.load_program(program).unwrap_err().to_string(),
+            emu.load_program_from_memory(program.as_mut_slice())
+                .unwrap_err()
+                .to_string(),
             "Program too long, got 26369 u16 instructions while limit is 26368"
         );
     }
