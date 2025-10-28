@@ -7,6 +7,10 @@ use thiserror::Error;
 pub enum Lc3EmulatorError {
     #[error("Program not loaded yet")]
     ProgramNotLoaded,
+    #[error("Program needs to be even size in bytes to contain valid u16 instructions, but is {0} bytes long")]
+    ProgramNotEvenSize(u64),
+    #[error("Program does not fit into memory, file size: {0} is greater than usize")]
+    ProgramDoesNotFitIntoMemory(u64),
     #[error("Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}")]
     ProgramTooLong { actual_instructions: usize, maximum_instructions: usize },
     #[error("Program is missing valid .ORIG header")]

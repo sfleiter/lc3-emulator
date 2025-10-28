@@ -82,18 +82,25 @@ impl Emulator {
     /// - Program too long
     pub fn load_program(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
         let file = File::open(path)?;
-        let size = file.metadata()?.len();
-        // one u16 equals 2 bytes plus 2 bytes for the .ORIG section
-        let mut file_data: Vec<u8> = Vec::with_capacity(size as usize + 2);
+        let file_size = file.metadata()?.len();
+        if file_size % 2 == 1 {
+            return Err(Lc3EmulatorError::ProgramNotEvenSize(file_size));
+        }
+        let u16_file_size = usize::try_from(file_size / 2)
+            .map_err(|_| Lc3EmulatorError::ProgramDoesNotFitIntoMemory(file_size))?;
+        let mut file_data: Vec<u16> = Vec::with_capacity(u16_file_size);
         let mut reader = BufReader::new(file);
-        reader.read_to_end(file_data.as_mut())?;
-        let final_data: &mut [u16] = unsafe {
-            &mut *core::ptr::slice_from_raw_parts_mut(
-                from_mut::<[u8]>(file_data.as_mut_slice()).cast::<u16>(),
-                file_data.len() / 2,
-            )
-        };
-        self.load_program_from_memory(final_data)
+        let slice;
+        // SAFETY: Casting an u16 slice to an u8 slice with double capacity is safe
+        unsafe {
+            slice = &mut *core::ptr::slice_from_raw_parts_mut(
+                from_mut::<[u16]>(file_data.as_mut()).cast::<u8>(),
+                u16_file_size.saturating_mul(2),
+            );
+            file_data.set_len(u16_file_size);
+        }
+        reader.read_exact(slice)?;
+        self.load_program_from_memory(file_data.as_slice())
     }
 
     pub fn instructions(
