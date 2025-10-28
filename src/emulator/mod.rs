@@ -4,7 +4,6 @@ use crate::hardware::{Memory, PROGRAM_SECTION_START_BYTES};
 use std::fmt::Debug;
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::ptr::from_mut;
 
 const ORIG_HEADER: u16 = switch_endian_bytes(PROGRAM_SECTION_START_BYTES);
 
@@ -90,11 +89,14 @@ impl Emulator {
             .map_err(|_| Lc3EmulatorError::ProgramDoesNotFitIntoMemory(file_size))?;
         let mut file_data: Vec<u16> = Vec::with_capacity(u16_file_size);
         let mut reader = BufReader::new(file);
-        let slice;
+        let slice_ptr = file_data.as_mut_ptr();
+        let slice: &mut [u8];
         // SAFETY: Casting an u16 slice to an u8 slice with double capacity is safe
+        // Every change to unsafe blocks needs to be checked via command
+        // MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test
         unsafe {
             slice = &mut *core::ptr::slice_from_raw_parts_mut(
-                from_mut::<[u16]>(file_data.as_mut()).cast::<u8>(),
+                slice_ptr.cast::<u8>(),
                 u16_file_size.saturating_mul(2),
             );
             file_data.set_len(u16_file_size);
