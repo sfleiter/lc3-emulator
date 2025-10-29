@@ -1,17 +1,26 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
 use crate::hardware::{Memory, PROGRAM_SECTION_START_BYTES};
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufReader, Read};
 
 const ORIG_HEADER: u16 = switch_endian_bytes(PROGRAM_SECTION_START_BYTES);
 
-#[derive(Debug)]
 pub struct Instruction {
     opcode: u8,
     dr: u8,
     pc_offset: u16,
+}
+
+impl Debug for Instruction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Op: {:04b}, DR: {:03b}, PC_Off: {:09b}",
+            self.opcode, self.dr, self.pc_offset
+        )
+    }
 }
 
 impl TryFrom<u16> for Instruction {
@@ -22,6 +31,7 @@ impl TryFrom<u16> for Instruction {
         let opcode = (bits >> 12) as u8;
         let dr = (bits >> 9) as u8 & 0b111;
         let pc_offset = bits & 0b1_1111_1111;
+        // println!("Ins: {bits:016b}, Op: {opcode:04b}, DR: {dr:03b}, PC_Off: {pc_offset:09b}");
         Ok(Self {
             opcode,
             dr,
