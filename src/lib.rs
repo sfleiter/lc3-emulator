@@ -9,8 +9,8 @@
 //! use lc3_emulator::emulator::Emulator;
 //! let mut emu = Emulator::new();
 //! emu.load_program("examples/hello_world.o").unwrap();
-//! let instructions =  emu.instructions();
-//! assert_eq!(emu.instructions().unwrap().count(), 15);
+//! let instructions =  emu.operations();
+//! assert_eq!(emu.operations().unwrap().count(), 15);
 //! ```
 //! # Errors
 //! - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction

@@ -18,7 +18,9 @@ pub enum Lc3EmulatorError {
     #[error("Program is not loaded at 0x{expected_address:04X?}' but 0x{actual_address:04X?}")]
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
     #[error(transparent)]
-    IoError(#[from] io::Error)
+    IoError(#[from] io::Error),
+    #[error("Invalid instruction opcode: 0b{0:04b}")]
+    InvalidInstruction(u8),
 }
 
 impl Debug for Lc3EmulatorError {

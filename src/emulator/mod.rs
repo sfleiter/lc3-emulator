@@ -5,9 +5,56 @@ use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-const ORIG_HEADER: u16 = switch_endian_bytes(PROGRAM_SECTION_START_BYTES);
+const ORIG_HEADER: u16 = PROGRAM_SECTION_START_BYTES;
 
-pub struct Instruction {
+#[rustfmt::skip]
+#[derive(Debug)]
+#[derive(PartialEq, Eq)]
+pub enum Operation {
+    Add  = 0b0001,
+    And  = 0b0101,
+    Not  = 0b1001,
+    Br   = 0b0000,
+    Jmp  = 0b1100,
+    Jsr  = 0b0100,
+    //    Ret = 0b1100, // TODO Clash with JMP
+    Ld   = 0b0010,
+    Ldi  = 0b1010,
+    Ldr  = 0b0110,
+    Lea  = 0b1110,
+    St   = 0b0011,
+    Sti  = 0b1011,
+    Str  = 0b0111,
+    Trap = 0b1111,
+    Rti  = 0b1000,
+    Reserved = 1101,
+}
+
+impl TryFrom<Instruction> for Operation {
+    type Error = Lc3EmulatorError;
+    fn try_from(i: Instruction) -> Result<Self, Self::Error> {
+        let operation = match (i.opcode, i.dr, i.pc_offset) {
+            (o, _, _) if o == Self::Add as u8 => Self::Add,
+            (o, _, _) if o == Self::And as u8 => Self::And,
+            (o, _, _) if o == Self::Not as u8 => Self::Not,
+            (o, _, _) if o == Self::Br as u8 => Self::Br,
+            (o, _, _) if o == Self::Jmp as u8 => Self::Jmp,
+            (o, _, _) if o == Self::Jsr as u8 => Self::Jsr,
+            (o, _, _) if o == Self::Ld as u8 => Self::Ld,
+            (o, _, _) if o == Self::Ldi as u8 => Self::Ldi,
+            (o, _, _) if o == Self::Ldr as u8 => Self::Ldr,
+            (o, _, _) if o == Self::Lea as u8 => Self::Lea,
+            (o, _, _) if o == Self::St as u8 => Self::St,
+            (o, _, _) if o == Self::Sti as u8 => Self::Sti,
+            (o, _, _) if o == Self::Str as u8 => Self::Str,
+            (o, _, _) if o == Self::Trap as u8 => Self::Trap,
+            (o, _, _) if o == Self::Rti as u8 => Self::Rti,
+            (o, _, _) => return Err(Lc3EmulatorError::InvalidInstruction(o)),
+        };
+        Ok(operation)
+    }
+}
+struct Instruction {
     opcode: u8,
     dr: u8,
     pc_offset: u16,
@@ -23,20 +70,18 @@ impl Debug for Instruction {
     }
 }
 
-impl TryFrom<u16> for Instruction {
-    type Error = Lc3EmulatorError;
-
-    fn try_from(bits: u16) -> Result<Self, Self::Error> {
+impl From<u16> for Instruction {
+    fn from(bits: u16) -> Self {
         // format: OOOO_DDD_P_PPPP_PPPP
         let opcode = (bits >> 12) as u8;
         let dr = (bits >> 9) as u8 & 0b111;
         let pc_offset = bits & 0b1_1111_1111;
         // println!("Ins: {bits:016b}, Op: {opcode:04b}, DR: {dr:03b}, PC_Off: {pc_offset:09b}");
-        Ok(Self {
+        Self {
             opcode,
             dr,
             pc_offset,
-        })
+        }
     }
 }
 
@@ -99,50 +144,49 @@ impl Emulator {
             .map_err(|_| Lc3EmulatorError::ProgramDoesNotFitIntoMemory(file_size))?;
         let mut file_data: Vec<u16> = Vec::with_capacity(u16_file_size);
         let mut reader = BufReader::new(file);
-        let slice_ptr = file_data.as_mut_ptr();
-        let slice: &mut [u8];
-        // SAFETY: Casting an u16 slice to an u8 slice with double capacity is safe
-        // Every change to unsafe blocks needs to be checked via command
-        // MIRIFLAGS="-Zmiri-disable-isolation" cargo +nightly miri test
-        unsafe {
-            slice = &mut *core::ptr::slice_from_raw_parts_mut(
-                slice_ptr.cast::<u8>(),
-                u16_file_size.saturating_mul(2),
-            );
-            file_data.set_len(u16_file_size);
+        let mut buf = [0u8; 2];
+        let mut read_total = 0;
+        while read_total < file_size {
+            match reader.read_exact(&mut buf) {
+                Ok(()) => {
+                    file_data.push(switch_endian_bytes(buf[0], buf[1]));
+                    read_total += 2;
+                }
+                Err(e) => return Err(Lc3EmulatorError::IoError(e)),
+            }
         }
-        reader.read_exact(slice)?;
         self.load_program_from_memory(file_data.as_slice())
     }
 
-    pub fn instructions(
+    pub fn operations(
         &self,
-    ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
+    ) -> Result<impl ExactSizeIterator<Item = Operation> + Debug, Lc3EmulatorError> {
         Ok(self
             .memory
             .program_slice()?
             .iter()
-            .map(|bits| Instruction::try_from(*bits))
-            .collect::<Result<Vec<Instruction>, _>>()?
+            .map(|bits| Instruction::from(*bits))
+            .map(Operation::try_from)
+            .collect::<Result<Vec<Operation>, Lc3EmulatorError>>()?
             .into_iter())
     }
 }
 
 #[inline]
 #[cfg(target_endian = "little")]
-const fn switch_endian_bytes(data: u16) -> u16 {
-    // eprintln!("data: 0x{:04X?}", data);
-    data.rotate_right(8)
+fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
+    //eprintln!("input: 0x{data0:02X?}, 0x{data1:02X?}, result: 0x{res:04X?}");
+    u16::from(data0) << 8 | u16::from(data1)
 }
 #[inline]
 #[cfg(target_endian = "big")]
-const fn switch_endian_bytes(data: u16) -> u16 {
-    data
+fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
+    u16::from(data1) << 8 | u16::from(data0)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::emulator::{Emulator, ORIG_HEADER};
+    use crate::emulator::{Emulator, ORIG_HEADER, Operation};
     use crate::hardware::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
@@ -158,25 +202,28 @@ mod tests {
         );
     }
 
+    fn no(i: &mut impl Iterator<Item = Operation>) -> Operation {
+        i.next().unwrap()
+    }
+
     #[test]
     pub fn test_load_program_short() {
         let mut emu = Emulator::new();
-        let mut program = vec![ORIG_HEADER, 0b0111_010_010101010_]; // LEA
+        let mut program = vec![ORIG_HEADER, 0b1110_010_010101010]; // LEA
         emu.load_program_from_memory(program.as_mut_slice())
             .unwrap();
-        let mut instructions = emu.instructions().unwrap();
-        assert_eq!(instructions.len(), 1);
-        let instruction = instructions.next().unwrap();
-        assert_eq!(instruction.opcode, 0b111);
-        assert_eq!(instruction.dr, 0b010);
-        assert_eq!(instruction.pc_offset, 0b1010_1010);
+        let mut ops = emu.operations().unwrap();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(Operation::Lea, no(&mut ops));
     }
     #[test]
     pub fn test_load_program_disk_hello() {
         let mut emu = Emulator::new();
         emu.load_program("examples/hello_world.o").unwrap();
-        let instructions = emu.instructions().unwrap();
-        assert_eq!(instructions.len(), 15);
+        let mut ops = emu.operations().unwrap();
+        assert_eq!(ops.len(), 15);
+        assert_eq!(Operation::Lea, no(&mut ops));
+        // TODO add more assertions for further content
     }
     #[test]
     pub fn test_load_program_max_size() {
@@ -185,8 +232,8 @@ mod tests {
         program[0] = ORIG_HEADER;
         emu.load_program_from_memory(program.as_mut_slice())
             .unwrap();
-        let instructions = emu.instructions().unwrap();
-        assert_eq!(instructions.len(), PROGRAM_SECTION_MAX_INSTRUCTION_COUNT);
+        let ops = emu.operations().unwrap();
+        assert_eq!(ops.len(), PROGRAM_SECTION_MAX_INSTRUCTION_COUNT);
     }
     #[test]
     pub fn test_load_program_too_large() {
