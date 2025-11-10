@@ -12,7 +12,7 @@ pub enum Lc3EmulatorError {
     #[error("Program does not fit into memory, file size: {0} is greater than usize")]
     ProgramDoesNotFitIntoMemory(u64),
     #[error("Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}")]
-    ProgramTooLong { actual_instructions: usize, maximum_instructions: usize },
+    ProgramTooLong { actual_instructions: usize, maximum_instructions: u16 },
     #[error("Program is missing valid .ORIG header")]
     ProgramMissingOrigHeader,
     #[error("Program is not loaded at 0x{expected_address:04X?}' but 0x{actual_address:04X?}")]

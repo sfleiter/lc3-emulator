@@ -1,11 +1,12 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
-use crate::hardware::memory::{Memory, PROGRAM_SECTION_START_BYTES};
+use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
+use crate::hardware::registers::Registers;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-const ORIG_HEADER: u16 = PROGRAM_SECTION_START_BYTES;
+const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
 #[rustfmt::skip]
 #[derive(Debug)]
@@ -88,6 +89,7 @@ impl From<u16> for Instruction {
 /// The public facing emulator used to run LC-3 programs.
 pub struct Emulator {
     memory: Memory,
+    registers: Registers,
 }
 impl Default for Emulator {
     fn default() -> Self {
@@ -100,6 +102,7 @@ impl Emulator {
     pub fn new() -> Self {
         Self {
             memory: Memory::new(),
+            registers: Registers::new(),
         }
     }
 
@@ -114,7 +117,7 @@ impl Emulator {
         if header[0] != ORIG_HEADER {
             let result = Err(ProgramLoadedAtWrongAddress {
                 actual_address: header[0],
-                expected_address: PROGRAM_SECTION_START_BYTES,
+                expected_address: PROGRAM_SECTION_START,
             });
             return result;
         }
@@ -158,6 +161,10 @@ impl Emulator {
         self.load_program_from_memory(file_data.as_slice())
     }
 
+    /// Return operations parsed from loaded program.
+    /// # Errors
+    /// - Program not loaded yet
+    /// - Unknown instruction
     pub fn operations(
         &self,
     ) -> Result<impl ExactSizeIterator<Item = Operation> + Debug, Lc3EmulatorError> {
@@ -169,6 +176,21 @@ impl Emulator {
             .map(Operation::try_from)
             .collect::<Result<Vec<Operation>, Lc3EmulatorError>>()?
             .into_iter())
+    }
+
+    /// Executes the loaded program.
+    /// # Errors
+    /// - Program not loaded yet
+    /// - Unknown instruction
+    pub fn execute(&mut self) -> Result<(), Lc3EmulatorError> {
+        while self.registers.pc < self.memory.program_end() {
+            let data = self.memory.memory()?[usize::from(self.registers.pc)];
+            let i = Instruction::from(data);
+            let op = Operation::try_from(i)?;
+            println!("{op:?}");
+            self.registers.pc += 1;
+        }
+        Ok(())
     }
 }
 
@@ -190,7 +212,7 @@ mod tests {
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
-        PROGRAM_SECTION_MAX_INSTRUCTION_COUNT + 1;
+        PROGRAM_SECTION_MAX_INSTRUCTION_COUNT as usize + 1;
     #[test]
     pub fn test_load_program_missing_header() {
         let mut emu = Emulator::new();
@@ -233,7 +255,10 @@ mod tests {
         emu.load_program_from_memory(program.as_mut_slice())
             .unwrap();
         let ops = emu.operations().unwrap();
-        assert_eq!(ops.len(), PROGRAM_SECTION_MAX_INSTRUCTION_COUNT);
+        assert_eq!(
+            ops.len(),
+            usize::from(PROGRAM_SECTION_MAX_INSTRUCTION_COUNT)
+        );
     }
     #[test]
     pub fn test_load_program_too_large() {
@@ -244,7 +269,7 @@ mod tests {
             emu.load_program_from_memory(program.as_mut_slice())
                 .unwrap_err()
                 .to_string(),
-            "Program too long, got 26369 u16 instructions while limit is 26368"
+            "Program too long, got 52737 u16 instructions while limit is 52736"
         );
     }
 }
