@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Registers {
     general_purpose: [u16; 8],
     pub pc: u16,
@@ -25,13 +26,13 @@ impl Registers {
     pub const fn get_conditional_register(&self) -> ConditionFlag {
         self.cond
     }
-    fn update_conditional_register(&mut self, r: u8) {
+    pub fn update_conditional_register(&mut self, r: u8) {
         let val = self.get(r);
         self.cond = ConditionFlag::from(val);
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConditionFlag {
     Pos = 1 << 0, // Positive
     Zero = 1 << 1,

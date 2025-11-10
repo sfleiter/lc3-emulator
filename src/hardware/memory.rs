@@ -1,5 +1,6 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::ProgramTooLong;
+use std::fmt::{Debug, Formatter};
 
 pub const PROGRAM_SECTION_START: u16 = 0x3000;
 pub const PROGRAM_SECTION_END: u16 = 0xFDFF;
@@ -12,6 +13,23 @@ pub struct Memory {
     /// Index equals memory address
     data: Vec<u16>,
     instruction_count: u16,
+}
+impl Debug for Memory {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.program_slice() {
+            Ok(p) => {
+                let ins = p.len();
+                writeln!(
+                    f,
+                    "Instructions: {ins:?}, Program section contents: \n[{p:?}]"
+                )
+            }
+            Err(e) => match e {
+                Lc3EmulatorError::ProgramNotLoaded => write!(f, "Program not yet loaded"),
+                _ => write!(f, "Error: {e:?}"),
+            },
+        }
+    }
 }
 impl Memory {
     pub fn new() -> Self {
