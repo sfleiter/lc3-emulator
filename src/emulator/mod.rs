@@ -1,6 +1,6 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
-use crate::hardware::{Memory, PROGRAM_SECTION_START_BYTES};
+use crate::hardware::memory::{Memory, PROGRAM_SECTION_START_BYTES};
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -187,7 +187,7 @@ fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
 #[cfg(test)]
 mod tests {
     use crate::emulator::{Emulator, ORIG_HEADER, Operation};
-    use crate::hardware::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
+    use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT + 1;
