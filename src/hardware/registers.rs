@@ -44,7 +44,7 @@ impl From<u16> for ConditionFlag {
         if value == 0 {
             Self::Zero
         } else if value >> 15 == 1 {
-            // leftmost bit is 1 for negative numbers
+            // leftmost bit is 1 for negative numbers in two's complement
             Self::Neg
         } else {
             Self::Pos

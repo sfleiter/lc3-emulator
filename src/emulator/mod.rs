@@ -87,15 +87,25 @@ impl Instruction {
     fn is_immediate(self) -> bool {
         self.get_bit_range(5, 5) == 1
     }
+    /// Implements sign extension as described at [Sign extension](https://en.wikipedia.org/wiki/Sign_extension).
+    #[must_use]
+    const fn sign_extend(bits: u16, valid_bits: u8) -> u16 {
+        let most_significant_but = bits >> (valid_bits - 1);
+        if most_significant_but == 1 {
+            // negative: 1-extend
+            bits | (0xFFFF << valid_bits)
+        } else {
+            // positive, already 0-extended
+            bits
+        }
+    }
     fn get_immediate(self) -> u16 {
-        // TODO sign extend
-        self.get_bit_range(0, 4)
+        Self::sign_extend(self.get_bit_range(0, 4), 5)
     }
     /// get the last `len` bits from `0` to `len - 1`
     #[must_use]
     pub fn pc_offset(self, len: u8) -> u16 {
-        // TODO sign extend
-        self.get_bit_range(0, len - 1)
+        Self::sign_extend(self.get_bit_range(0, len - 1), len)
     }
 }
 
@@ -241,15 +251,16 @@ impl Emulator {
         Ok(())
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn add(&mut self, i: Instruction) {
         self.registers.set(
             i.dr_number(),
-            self.registers.get(i.sr1_number())
-                + if i.is_immediate() {
-                    i.get_immediate()
+            (u32::from(self.registers.get(i.sr1_number()))
+                + (if i.is_immediate() {
+                    u32::from(i.get_immediate())
                 } else {
-                    self.registers.get(i.sr2_number())
-                },
+                    u32::from(self.registers.get(i.sr2_number()))
+                })) as u16,
         );
         self.registers.update_conditional_register(i.dr_number());
     }
@@ -320,10 +331,10 @@ mod tests {
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT as usize + 1;
     #[gtest]
     pub fn test_instr_get_bit_range_valid() {
-        let sut = Instruction::from(0b1010_101_101010101);
+        let sut = Instruction::from(0b1010_101_001010101);
         expect_that!(sut.op_code(), eq(0b1010));
         expect_that!(sut.dr_number(), eq(0b101));
-        expect_that!(sut.pc_offset(9), eq(0b101010101));
+        expect_that!(sut.pc_offset(9), eq(0b0_0101_0101));
 
         // Add: DR: 3, SR1: 2, Immediate: false, SR2: 1
         let sut = Instruction::from(0b0001_011_010_0_00_001);
@@ -335,12 +346,12 @@ mod tests {
         expect_that!(sut.sr2_number(), eq(1));
 
         // Add: DR: 7, SR1: 0, Immediate: true, imm5: 30
-        let sut = Instruction::from(0b0001_111_000_1_11110);
+        let sut = Instruction::from(0b0001_111_000_1_01110);
         expect_that!(sut.op_code(), eq(1));
         expect_that!(sut.dr_number(), eq(7));
         expect_that!(sut.sr1_number(), eq(0));
         expect_that!(sut.is_immediate(), eq(true));
-        expect_that!(sut.get_immediate(), eq(30));
+        expect_that!(sut.get_immediate(), eq(14));
     }
     #[gtest]
     #[should_panic(expected = "wrong direction of from: 2 and to: 1")]
@@ -370,25 +381,60 @@ mod tests {
     }
 
     #[gtest]
-    pub fn test_load_program_short_add() {
-        // Add: DR: 2, SR1: 0: 22, Immediate: false, SR2: 1: 128 => R2: 150
-        let i1: u16 = 0b0001_010_000_0_00_001;
-        // Add: DR: 3, SR1: 2: 150, Immediate: true, imm5: 30 => R3: 180
-        let i2: u16 = 0b0001_011_010_1_11110;
-
-        let program = vec![ORIG_HEADER, i1, i2];
+    pub fn test_load_program_add() {
         let mut emu = Emulator::new();
-        emu.load_program_from_memory(program.as_slice()).unwrap();
         emu.registers.set(0, 22);
         emu.registers.set(1, 128);
+        // Add: DR: 2, SR1: 0: 22, Immediate: false, SR2: 1: 128 => R2: 150
+        let i1: u16 = 0b0001_010_000_0_00_001;
+        // Add: DR: 3, SR1: 2: 150, Immediate: true, imm5: 14 => R3: 164
+        let i2: u16 = 0b0001_011_010_1_01110;
+        let program = vec![ORIG_HEADER, i1, i2];
+        emu.load_program_from_memory(program.as_slice()).unwrap();
         emu.execute().unwrap();
         expect_that!(emu.registers.get(0), eq(22));
         expect_that!(emu.registers.get(1), eq(128));
         expect_that!(emu.registers.get(2), eq(150));
-        expect_that!(emu.registers.get(3), eq(180));
+        expect_that!(emu.registers.get(3), eq(164));
         expect_that!(
             emu.registers.get_conditional_register(),
             eq(ConditionFlag::Pos)
+        );
+    }
+    #[gtest]
+    pub fn test_load_program_add_underflow() {
+        let mut emu = Emulator::new();
+        emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
+        emu.registers.set(1, 1);
+        // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 32768
+        let i1: u16 = 0b0001_010_000_0_00_001;
+        let program = vec![ORIG_HEADER, i1];
+        emu.load_program_from_memory(program.as_slice()).unwrap();
+        emu.execute().unwrap();
+        expect_that!(emu.registers.get(0), eq(0x7FFF));
+        expect_that!(emu.registers.get(1), eq(1));
+        expect_that!(emu.registers.get(2), eq(32768));
+        expect_that!(
+            emu.registers.get_conditional_register(),
+            eq(ConditionFlag::Neg)
+        );
+    }
+    #[gtest]
+    pub fn test_load_program_add_result_0() {
+        let mut emu = Emulator::new();
+        emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
+        emu.registers.set(1, !0x7FFF + 1);
+        // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 0
+        let i1: u16 = 0b0001_010_000_0_00_001;
+        let program = vec![ORIG_HEADER, i1];
+        emu.load_program_from_memory(program.as_slice()).unwrap();
+        emu.execute().unwrap();
+        expect_that!(emu.registers.get(0), eq(0x7FFF));
+        expect_that!(emu.registers.get(1), eq(!0x7FFF + 1));
+        expect_that!(emu.registers.get(2), eq(0));
+        expect_that!(
+            emu.registers.get_conditional_register(),
+            eq(ConditionFlag::Zero)
         );
     }
     #[gtest]
