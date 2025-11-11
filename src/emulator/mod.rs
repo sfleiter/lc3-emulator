@@ -57,7 +57,7 @@ impl Instruction {
             "index: {to:?} to u16 is greater than maximum value {:?}",
             Self::MAX_INDEX
         );
-        (self.0 >> from) & (2u16.pow(u32::from(to - from + 1)) - 1)
+        (self.0 >> from) & ((0b1 << (to - from + 1)) - 1)
     }
     /// Gives the value of only the specified bit range and converts that to u8.
     /// See [`Instruction::get_bit_range()`]
