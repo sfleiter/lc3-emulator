@@ -128,7 +128,6 @@ impl From<u16> for Instruction {
 }
 
 /// The public facing emulator used to run LC-3 programs.
-#[derive(Debug)]
 pub struct Emulator {
     memory: Memory,
     registers: Registers,
@@ -219,12 +218,12 @@ impl Emulator {
     /// - Program not loaded yet
     /// - Unknown instruction
     pub fn execute(&mut self) -> Result<(), Lc3EmulatorError> {
-        while self.registers.pc < self.memory.program_end() {
-            let data = self.memory.memory()?[usize::from(self.registers.pc)];
+        while self.registers.pc() < self.memory.program_end() {
+            let data = self.memory.memory()?[usize::from(self.registers.pc().as_u16())];
             let i = Instruction::from(data);
             println!("{i:?}");
             self.execute_instruction(i)?;
-            self.registers.pc += 1;
+            self.registers.inc_pc();
         }
         Ok(())
     }
@@ -255,11 +254,11 @@ impl Emulator {
     fn add(&mut self, i: Instruction) {
         self.registers.set(
             i.dr_number(),
-            (u32::from(self.registers.get(i.sr1_number()))
+            (self.registers.get(i.sr1_number()).as_u32()
                 + (if i.is_immediate() {
                     u32::from(i.get_immediate())
                 } else {
-                    u32::from(self.registers.get(i.sr2_number()))
+                    self.registers.get(i.sr2_number()).as_u32()
                 })) as u16,
         );
         self.registers.update_conditional_register(i.dr_number());
@@ -305,6 +304,15 @@ impl Emulator {
     }
     fn rti(&self, i: Instruction) {
         unimplemented!()
+    }
+}
+
+impl Debug for Emulator {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Emulator:")?;
+        writeln!(f, "{:?}", self.memory)?;
+        writeln!(f, "Registers:\n{:?}", self.registers)?;
+        Ok(())
     }
 }
 

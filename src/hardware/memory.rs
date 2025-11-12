@@ -19,10 +19,7 @@ impl Debug for Memory {
         match self.program_slice() {
             Ok(p) => {
                 let ins = p.len();
-                writeln!(
-                    f,
-                    "Instructions: {ins:?}, Program section contents: \n[{p:?}]"
-                )
+                write!(f, "Instructions: {ins:?}, Program section contents: {p:?}")
             }
             Err(e) => match e {
                 Lc3EmulatorError::ProgramNotLoaded => write!(f, "Program not yet loaded"),
