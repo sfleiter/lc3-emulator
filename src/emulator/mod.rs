@@ -263,11 +263,22 @@ impl Emulator {
         );
         self.registers.update_conditional_register(i.dr_number());
     }
-    fn and(&self, i: Instruction) {
-        unimplemented!()
+    fn and(&mut self, i: Instruction) {
+        self.registers.set(
+            i.dr_number(),
+            self.registers.get(i.sr1_number()).as_u16()
+                & (if i.is_immediate() {
+                    i.get_immediate()
+                } else {
+                    self.registers.get(i.sr2_number()).as_u16()
+                }),
+        );
+        self.registers.update_conditional_register(i.dr_number());
     }
-    fn not(&self, i: Instruction) {
-        unimplemented!()
+    fn not(&mut self, i: Instruction) {
+        self.registers
+            .set(i.dr_number(), !self.registers.get(i.sr1_number()).as_u16());
+        self.registers.update_conditional_register(i.dr_number());
     }
     fn br(&self, i: Instruction) {
         unimplemented!()
@@ -389,7 +400,7 @@ mod tests {
     }
 
     #[gtest]
-    pub fn test_load_program_add() {
+    pub fn test_opcode_add() {
         let mut emu = Emulator::new();
         emu.registers.set(0, 22);
         emu.registers.set(1, 128);
@@ -410,7 +421,7 @@ mod tests {
         );
     }
     #[gtest]
-    pub fn test_load_program_add_underflow() {
+    pub fn test_opcode_add_underflow() {
         let mut emu = Emulator::new();
         emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
         emu.registers.set(1, 1);
@@ -428,7 +439,7 @@ mod tests {
         );
     }
     #[gtest]
-    pub fn test_load_program_add_result_0() {
+    pub fn test_opcode_add_result_0() {
         let mut emu = Emulator::new();
         emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
         emu.registers.set(1, !0x7FFF + 1);
@@ -445,6 +456,58 @@ mod tests {
             eq(ConditionFlag::Zero)
         );
     }
+    #[gtest]
+    pub fn test_opcode_and() {
+        let mut emu = Emulator::new();
+        emu.registers.set(0, 0b1101_1001_0111_0101);
+        emu.registers.set(1, 0b0100_1010_0010_1001);
+        // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 0
+        let i1: u16 = 0b0101_010_000_0_00_001;
+        let program = vec![ORIG_HEADER, i1];
+        emu.load_program_from_memory(program.as_slice()).unwrap();
+        emu.execute().unwrap();
+        expect_that!(emu.registers.get(0), eq(0b1101_1001_0111_0101));
+        expect_that!(emu.registers.get(1), eq(0b0100_1010_0010_1001));
+        expect_that!(emu.registers.get(2), eq(0b0100_1000_0010_0001));
+        expect_that!(
+            emu.registers.get_conditional_register(),
+            eq(ConditionFlag::Pos)
+        );
+    }
+    #[gtest]
+    pub fn test_opcode_and_immediate() {
+        let mut emu = Emulator::new();
+        emu.registers.set(0, 0b1101_1001_0111_0101);
+        // Add: DR: 2, SR1: 0, Immediate: true: 21, 0xFFF5 => R2: 0
+        let i1: u16 = 0b0101_010_000_1_10101;
+        let program = vec![ORIG_HEADER, i1];
+        emu.load_program_from_memory(program.as_slice()).unwrap();
+        emu.execute().unwrap();
+        expect_that!(emu.registers.get(0), eq(0b1101_1001_0111_0101));
+        // Immediate sign extended:           0b1111_1111_1111_0101
+        expect_that!(emu.registers.get(2), eq(0b1101_1001_0111_0101));
+        expect_that!(
+            emu.registers.get_conditional_register(),
+            eq(ConditionFlag::Neg)
+        );
+    }
+    #[gtest]
+    pub fn test_opcode_not() {
+        let mut emu = Emulator::new();
+        emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
+        // Add: DR: 1, SR1: 0 => R1: 0xFFFE
+        let i1: u16 = 0b1001_001_000_111111;
+        let program = vec![ORIG_HEADER, i1];
+        emu.load_program_from_memory(program.as_slice()).unwrap();
+        emu.execute().unwrap();
+        expect_that!(emu.registers.get(0), eq(0x7FFF));
+        expect_that!(emu.registers.get(1), eq(0x8000));
+        expect_that!(
+            emu.registers.get_conditional_register(),
+            eq(ConditionFlag::Neg)
+        );
+    }
+
     #[gtest]
     pub fn test_load_program_disk_hello() {
         let mut emu = Emulator::new();
