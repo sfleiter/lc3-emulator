@@ -68,6 +68,7 @@ impl Registers {
         assert!(r <= 7, "Invalid general purpose register set");
         self.general_purpose[usize::from(r)] = Register(value);
     }
+    #[cfg(test)] // Will be in opcode implementations the future
     pub const fn get_conditional_register(&self) -> ConditionFlag {
         self.cond
     }

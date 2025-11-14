@@ -304,40 +304,40 @@ impl Emulator {
             .set(i.dr_number(), !self.registers.get(i.sr1_number()).as_u16());
         self.registers.update_conditional_register(i.dr_number());
     }
-    fn br(&self, i: Instruction) {
+    fn br(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn jmp_or_ret(&self, i: Instruction) {
+    fn jmp_or_ret(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn jsr(&self, i: Instruction) {
+    fn jsr(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn ld(&self, i: Instruction) {
+    fn ld(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn ldi(&self, i: Instruction) {
+    fn ldi(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn ldr(&self, i: Instruction) {
+    fn ldr(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn lea(&self, i: Instruction) {
+    fn lea(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn st(&self, i: Instruction) {
+    fn st(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn sti(&self, i: Instruction) {
+    fn sti(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn str(&self, i: Instruction) {
+    fn str(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn trap(&self, i: Instruction) {
+    fn trap(&self, _i: Instruction) {
         unimplemented!()
     }
-    fn rti(&self, i: Instruction) {
+    fn rti(&self, _i: Instruction) {
         unimplemented!()
     }
 }
