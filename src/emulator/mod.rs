@@ -2,6 +2,7 @@ use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::Registers;
+use std::cmp::PartialEq;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -127,10 +128,17 @@ impl From<u16> for Instruction {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum EmulatorState {
+    Start,
+    Loaded,
+    Executed,
+}
 /// The public facing emulator used to run LC-3 programs.
 pub struct Emulator {
     memory: Memory,
     registers: Registers,
+    state: EmulatorState,
 }
 impl Default for Emulator {
     fn default() -> Self {
@@ -144,10 +152,20 @@ impl Emulator {
         Self {
             memory: Memory::new(),
             registers: Registers::new(),
+            state: EmulatorState::Start,
+        }
+    }
+
+    fn enforce_state(&self, state: &EmulatorState) -> Result<(), Lc3EmulatorError> {
+        if *state == self.state {
+            Ok(())
+        } else {
+            Err(Lc3EmulatorError::WrongState)
         }
     }
 
     fn load_program_from_memory(&mut self, program: &[u16]) -> Result<(), Lc3EmulatorError> {
+        self.enforce_state(&EmulatorState::Start)?;
         let Some((header, rest)) = program.split_at_checked(1) else {
             return Err(ProgramMissingOrigHeader);
         };
@@ -158,7 +176,9 @@ impl Emulator {
             });
             return result;
         }
-        self.memory.load_program(rest)
+        let res = self.memory.load_program(rest);
+        self.state = EmulatorState::Loaded;
+        res
     }
 
     /// Loads a program from disk into the memory section starting from
@@ -175,6 +195,7 @@ impl Emulator {
     /// - Program not loaded at byte offset `0x3000`
     /// - Program too long
     pub fn load_program(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
+        self.enforce_state(&EmulatorState::Start)?;
         let file = File::open(path)?;
         let file_size = file.metadata()?.len();
         if file_size % 2 == 1 {
@@ -204,6 +225,7 @@ impl Emulator {
     pub fn instructions(
         &self,
     ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
+        self.enforce_state(&EmulatorState::Loaded)?;
         Ok(self
             .memory
             .program_slice()?
@@ -218,6 +240,8 @@ impl Emulator {
     /// - Program not loaded yet
     /// - Unknown instruction
     pub fn execute(&mut self) -> Result<(), Lc3EmulatorError> {
+        self.enforce_state(&EmulatorState::Loaded)?;
+        self.state = EmulatorState::Executed;
         while self.registers.pc() < self.memory.program_end() {
             let data = self.memory.memory()?[usize::from(self.registers.pc().as_u16())];
             let i = Instruction::from(data);
