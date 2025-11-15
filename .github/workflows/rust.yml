@@ -11,10 +11,13 @@ env:
 
 jobs:
   build:
+    name: Built, Test and verify with Clippy
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
     - uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        components: clippy
     - name: Clippy
       run: cargo clippy
     - name: Build
