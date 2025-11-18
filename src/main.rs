@@ -7,5 +7,6 @@ fn main() -> Result<(), Lc3EmulatorError> {
     for i in emu.instructions()? {
         println!("{i:?}");
     }
+    emu.execute().expect("Program execution failed");
     Ok(())
 }

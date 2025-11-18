@@ -60,6 +60,10 @@ impl Registers {
     pub const fn inc_pc(&mut self) {
         self.pc.0 += 1;
     }
+    #[cfg(test)]
+    pub fn set_pc(&mut self, val: u16) {
+        self.pc = val.into();
+    }
     pub fn get(&self, r: u8) -> Register {
         assert!(r <= 7, "Invalid general purpose register get");
         self.general_purpose[usize::from(r)]
@@ -68,7 +72,7 @@ impl Registers {
         assert!(r <= 7, "Invalid general purpose register set");
         self.general_purpose[usize::from(r)] = Register(value);
     }
-    #[cfg(test)] // Will be in opcode implementations the future
+    #[cfg(test)]
     pub const fn get_conditional_register(&self) -> ConditionFlag {
         self.cond
     }

@@ -1,9 +1,8 @@
 use std::fmt::{Debug, Display, Formatter};
-use std::io;
 use thiserror::Error;
 
 #[rustfmt::skip]
-#[derive(Error)]
+#[derive(Error, PartialEq, Eq)]
 pub enum Lc3EmulatorError {
     #[error("Emulator can only load and execute once, please use a fresh instance, then load and finally execute")]
     WrongState,
@@ -19,8 +18,11 @@ pub enum Lc3EmulatorError {
     ProgramMissingOrigHeader,
     #[error("Program is not loaded at 0x{expected_address:04X?}' but 0x{actual_address:04X?}")]
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
-    #[error(transparent)]
-    IoError(#[from] io::Error),
+    #[error("Cannot read program from file '{file}': {message}")]
+    ProgramNotLoadable {
+        file: String,
+        message: String
+    },
     #[error("Invalid instruction opcode: 0b{0:04b}")]
     InvalidInstruction(u8),
 }

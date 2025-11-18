@@ -9,7 +9,8 @@ use instruction::Instruction;
 use std::cmp::PartialEq;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write, stdout};
+use std::ops::ControlFlow;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
@@ -89,6 +90,18 @@ impl Emulator {
         res
     }
 
+    fn map_err_program_not_loadable(path: &str, message: String) -> Lc3EmulatorError {
+        Lc3EmulatorError::ProgramNotLoadable {
+            file: path.to_owned(),
+            message,
+        }
+    }
+    fn get_file_with_size(path: &str) -> Result<(File, u64), std::io::Error> {
+        let file = File::open(path)?;
+        let file_size = file.metadata()?.len();
+        Ok((file, file_size))
+    }
+
     /// Loads a program from disk into the memory section starting from
     /// address `_PROGRAM_SECTION_START_BYTES`
     /// and returns an iterator over the loaded instructions.
@@ -104,8 +117,8 @@ impl Emulator {
     /// - Program too long
     pub fn load_program(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
         self.enforce_state(&EmulatorState::Start)?;
-        let file = File::open(path)?;
-        let file_size = file.metadata()?.len();
+        let (file, file_size) = Self::get_file_with_size(path)
+            .map_err(|e| Self::map_err_program_not_loadable(path, e.to_string()))?;
         if file_size % 2 == 1 {
             return Err(Lc3EmulatorError::ProgramNotEvenSize(file_size));
         }
@@ -116,13 +129,11 @@ impl Emulator {
         let mut buf = [0u8; 2];
         let mut read_total = 0;
         while read_total < file_size {
-            match reader.read_exact(&mut buf) {
-                Ok(()) => {
-                    file_data.push(switch_endian_bytes(buf[0], buf[1]));
-                    read_total += 2;
-                }
-                Err(e) => return Err(Lc3EmulatorError::IoError(e)),
-            }
+            reader
+                .read_exact(&mut buf)
+                .map_err(|e| Self::map_err_program_not_loadable(path, e.to_string()))?;
+            file_data.push(switch_endian_bytes(buf[0], buf[1]));
+            read_total += 2;
         }
         self.load_program_from_memory(file_data.as_slice())
     }
@@ -148,15 +159,23 @@ impl Emulator {
     /// - Program not loaded yet
     /// - Unknown instruction
     pub fn execute(&mut self) -> Result<(), Lc3EmulatorError> {
+        let mut writer = stdout().lock();
+        self.execute_with_writer(&mut writer)
+    }
+
+    fn execute_with_writer(&mut self, writer: &mut impl Write) -> Result<(), Lc3EmulatorError> {
         self.enforce_state(&EmulatorState::Loaded)?;
         self.state = EmulatorState::Executed;
         while self.registers.pc() < self.memory.program_end() {
             let data = self.memory.memory()?[usize::from(self.registers.pc().as_u16())];
             let i = Instruction::from(data);
-            println!("{i:?}");
-            self.execute_instruction(i)?;
+            // println!("{i:?}");
+            if let Some(res) = self.execute_instruction(i, writer).break_value() {
+                return res;
+            }
             self.registers.inc_pc();
         }
+        writer.flush().expect("Could not flush output writer");
         Ok(())
     }
 
@@ -164,7 +183,11 @@ impl Emulator {
         clippy::unnecessary_mut_passed,
         reason = "Needed for all opcodes thus if this fails this expect can be removed"
     )]
-    fn execute_instruction(&mut self, instruction: Instruction) -> Result<(), Lc3EmulatorError> {
+    fn execute_instruction(
+        &mut self,
+        instruction: Instruction,
+        writer: &mut impl Write,
+    ) -> ControlFlow<Result<(), Lc3EmulatorError>, ()> {
         match instruction.op_code() {
             o if o == Operation::Add as u8 => opcodes::add(instruction, &mut self.registers),
             o if o == Operation::And as u8 => opcodes::and(instruction, &mut self.registers),
@@ -181,11 +204,57 @@ impl Emulator {
             o if o == Operation::St as u8 => opcodes::st(instruction, &mut self.registers),
             o if o == Operation::Sti as u8 => opcodes::sti(instruction, &mut self.registers),
             o if o == Operation::Str as u8 => opcodes::str(instruction, &mut self.registers),
-            o if o == Operation::Trap as u8 => opcodes::trap(instruction, &mut self.registers),
+            o if o == Operation::Trap as u8 => return self.trap(instruction, writer),
             o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
-            o => return Err(Lc3EmulatorError::InvalidInstruction(o)),
+            o => return ControlFlow::Break(Err(Lc3EmulatorError::InvalidInstruction(o))),
         }
-        Ok(())
+        ControlFlow::Continue(())
+    }
+    /// Handles Trap Routines
+    ///
+    /// # Panics
+    /// - No access to memory, which can only happen when program is not loaded in which case
+    ///   we should never run this method
+    pub fn trap(
+        &mut self,
+        i: Instruction,
+        mut writer: impl Write,
+    ) -> ControlFlow<Result<(), Lc3EmulatorError>, ()> {
+        // TODO test all implemented trap routines
+        let trap_routine = i.get_bit_range(0, 7);
+        match trap_routine {
+            0x22 => {
+                let address = usize::from(self.registers.get(0).as_u16());
+                let mut end = address;
+                let mem = self
+                    .memory
+                    .memory()
+                    // TODO fixed by refactoring to state machine
+                    .expect("Memory not available, is a program loaded?");
+                let mut s = String::with_capacity(120);
+                while mem[end] != 0 {
+                    #[expect(
+                        clippy::cast_possible_truncation,
+                        reason = "Truncation is what is expected here"
+                    )]
+                    let c = (mem[end] as u8) as char;
+                    s.push(c);
+                    end += 1;
+                }
+                writer
+                    .write_fmt(format_args!("{s}\n"))
+                    .expect("Could not write output"); // TODO
+                ControlFlow::Continue(())
+            }
+            0x25 => {
+                println!("\nProgram halted");
+                ControlFlow::Break(Ok(()))
+            }
+            _ => {
+                eprintln!("Trap routine 0x{trap_routine:02X} not implemented yet");
+                todo!()
+            }
+        }
     }
 }
 
@@ -215,9 +284,32 @@ mod tests {
     use crate::emulator::{Emulator, ORIG_HEADER, Operation};
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
     use googletest::prelude::*;
+    use std::io::Write;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT as usize + 1;
+
+    struct StringWriter {
+        vec: Vec<u8>,
+    }
+    impl Write for StringWriter {
+        fn write(&mut self, data: &[u8]) -> std::result::Result<usize, std::io::Error> {
+            self.vec.write(data)
+        }
+        fn flush(&mut self) -> std::result::Result<(), std::io::Error> {
+            Ok(())
+        }
+    }
+    impl StringWriter {
+        fn new() -> Self {
+            let vec = Vec::<u8>::with_capacity(120);
+            Self { vec }
+        }
+        fn get_string(&self) -> String {
+            String::from_utf8(self.vec.clone()).unwrap()
+        }
+    }
+
     #[gtest]
     pub fn test_load_program_missing_header() {
         let mut emu = Emulator::new();
@@ -230,11 +322,16 @@ mod tests {
     }
     #[gtest]
     pub fn test_load_program_disk_hello() {
+        let mut sw = StringWriter::new();
         let mut emu = Emulator::new();
         emu.load_program("examples/hello_world.o").unwrap();
-        let mut ins = emu.instructions().unwrap();
-        assert_that!(ins.len(), eq(15));
-        assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
+        {
+            let mut ins = emu.instructions().unwrap();
+            assert_that!(ins.len(), eq(15));
+            assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
+        }
+        emu.execute_with_writer(&mut sw).unwrap();
+        assert_that!(sw.get_string(), eq("HelloWorld!\n"));
         // TODO add more assertions for further content
     }
     #[gtest]
