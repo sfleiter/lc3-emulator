@@ -1,5 +1,7 @@
 # https://github.com/actions-rust-lang/audit
 name: "Audit Dependencies"
+permissions:
+  contents: read
 on:
   push:
     paths:
