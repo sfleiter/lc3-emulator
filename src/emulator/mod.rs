@@ -1,4 +1,5 @@
 mod instruction;
+mod opcodes;
 
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
@@ -15,7 +16,7 @@ const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 #[rustfmt::skip]
 #[derive(Debug)]
 #[derive(PartialEq, Eq)]
-pub enum Operation {
+enum Operation {
     Add  = 0b0001,
     And  = 0b0101,
     Not  = 0b1001,
@@ -31,7 +32,7 @@ pub enum Operation {
     Str  = 0b0111,
     Trap = 0b1111,
     Rti  = 0b1000,
-    Reserved = 0b1101,
+    _Reserved = 0b1101,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -62,6 +63,7 @@ impl Emulator {
         }
     }
 
+    // TODO replace by moving emulator to a state machine
     fn enforce_state(&self, state: &EmulatorState) -> Result<(), Lc3EmulatorError> {
         if *state == self.state {
             Ok(())
@@ -158,93 +160,32 @@ impl Emulator {
         Ok(())
     }
 
+    #[expect(
+        clippy::unnecessary_mut_passed,
+        reason = "Needed for all opcodes thus if this fails this expect can be removed"
+    )]
     fn execute_instruction(&mut self, instruction: Instruction) -> Result<(), Lc3EmulatorError> {
         match instruction.op_code() {
-            o if o == Operation::Add as u8 => self.add(instruction),
-            o if o == Operation::And as u8 => self.and(instruction),
-            o if o == Operation::Not as u8 => self.not(instruction),
-            o if o == Operation::Br as u8 => self.br(instruction),
-            o if o == Operation::JmpOrRet as u8 => self.jmp_or_ret(instruction),
-            o if o == Operation::Jsr as u8 => self.jsr(instruction),
-            o if o == Operation::Ld as u8 => self.ld(instruction),
-            o if o == Operation::Ldi as u8 => self.ldi(instruction),
-            o if o == Operation::Ldr as u8 => self.ldr(instruction),
-            o if o == Operation::Lea as u8 => self.lea(instruction),
-            o if o == Operation::St as u8 => self.st(instruction),
-            o if o == Operation::Sti as u8 => self.sti(instruction),
-            o if o == Operation::Str as u8 => self.str(instruction),
-            o if o == Operation::Trap as u8 => self.trap(instruction),
-            o if o == Operation::Rti as u8 => self.rti(instruction),
+            o if o == Operation::Add as u8 => opcodes::add(instruction, &mut self.registers),
+            o if o == Operation::And as u8 => opcodes::and(instruction, &mut self.registers),
+            o if o == Operation::Not as u8 => opcodes::not(instruction, &mut self.registers),
+            o if o == Operation::Br as u8 => opcodes::br(instruction, &mut self.registers),
+            o if o == Operation::JmpOrRet as u8 => {
+                opcodes::jmp_or_ret(instruction, &mut self.registers);
+            }
+            o if o == Operation::Jsr as u8 => opcodes::jsr(instruction, &mut self.registers),
+            o if o == Operation::Ld as u8 => opcodes::ld(instruction, &mut self.registers),
+            o if o == Operation::Ldi as u8 => opcodes::ldi(instruction, &mut self.registers),
+            o if o == Operation::Ldr as u8 => opcodes::ldr(instruction, &mut self.registers),
+            o if o == Operation::Lea as u8 => opcodes::lea(instruction, &mut self.registers),
+            o if o == Operation::St as u8 => opcodes::st(instruction, &mut self.registers),
+            o if o == Operation::Sti as u8 => opcodes::sti(instruction, &mut self.registers),
+            o if o == Operation::Str as u8 => opcodes::str(instruction, &mut self.registers),
+            o if o == Operation::Trap as u8 => opcodes::trap(instruction, &mut self.registers),
+            o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
             o => return Err(Lc3EmulatorError::InvalidInstruction(o)),
         }
         Ok(())
-    }
-
-    #[allow(clippy::cast_possible_truncation)]
-    fn add(&mut self, i: Instruction) {
-        self.registers.set(
-            i.dr_number(),
-            (self.registers.get(i.sr1_number()).as_u32()
-                + (if i.is_immediate() {
-                    u32::from(i.get_immediate())
-                } else {
-                    self.registers.get(i.sr2_number()).as_u32()
-                })) as u16,
-        );
-        self.registers.update_conditional_register(i.dr_number());
-    }
-    fn and(&mut self, i: Instruction) {
-        self.registers.set(
-            i.dr_number(),
-            self.registers.get(i.sr1_number()).as_u16()
-                & (if i.is_immediate() {
-                    i.get_immediate()
-                } else {
-                    self.registers.get(i.sr2_number()).as_u16()
-                }),
-        );
-        self.registers.update_conditional_register(i.dr_number());
-    }
-    fn not(&mut self, i: Instruction) {
-        self.registers
-            .set(i.dr_number(), !self.registers.get(i.sr1_number()).as_u16());
-        self.registers.update_conditional_register(i.dr_number());
-    }
-    fn br(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn jmp_or_ret(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn jsr(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn ld(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn ldi(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn ldr(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn lea(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn st(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn sti(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn str(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn trap(&self, _i: Instruction) {
-        unimplemented!()
-    }
-    fn rti(&self, _i: Instruction) {
-        unimplemented!()
     }
 }
 
@@ -273,7 +214,6 @@ fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
 mod tests {
     use crate::emulator::{Emulator, ORIG_HEADER, Operation};
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
-    use crate::hardware::registers::ConditionFlag;
     use googletest::prelude::*;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
@@ -288,115 +228,6 @@ mod tests {
             eq("Program is missing valid .ORIG header")
         );
     }
-    #[gtest]
-    pub fn test_opcode_add() {
-        let mut emu = Emulator::new();
-        emu.registers.set(0, 22);
-        emu.registers.set(1, 128);
-        // Add: DR: 2, SR1: 0: 22, Immediate: false, SR2: 1: 128 => R2: 150
-        let i1: u16 = 0b0001_010_000_0_00_001;
-        // Add: DR: 3, SR1: 2: 150, Immediate: true, imm5: 14 => R3: 164
-        let i2: u16 = 0b0001_011_010_1_01110;
-        let program = vec![ORIG_HEADER, i1, i2];
-        emu.load_program_from_memory(program.as_slice()).unwrap();
-        emu.execute().unwrap();
-        expect_that!(emu.registers.get(0), eq(22));
-        expect_that!(emu.registers.get(1), eq(128));
-        expect_that!(emu.registers.get(2), eq(150));
-        expect_that!(emu.registers.get(3), eq(164));
-        expect_that!(
-            emu.registers.get_conditional_register(),
-            eq(ConditionFlag::Pos)
-        );
-    }
-    #[gtest]
-    pub fn test_opcode_add_underflow() {
-        let mut emu = Emulator::new();
-        emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
-        emu.registers.set(1, 1);
-        // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 32768
-        let i1: u16 = 0b0001_010_000_0_00_001;
-        let program = vec![ORIG_HEADER, i1];
-        emu.load_program_from_memory(program.as_slice()).unwrap();
-        emu.execute().unwrap();
-        expect_that!(emu.registers.get(0), eq(0x7FFF));
-        expect_that!(emu.registers.get(1), eq(1));
-        expect_that!(emu.registers.get(2), eq(32768));
-        expect_that!(
-            emu.registers.get_conditional_register(),
-            eq(ConditionFlag::Neg)
-        );
-    }
-    #[gtest]
-    pub fn test_opcode_add_result_0() {
-        let mut emu = Emulator::new();
-        emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
-        emu.registers.set(1, !0x7FFF + 1);
-        // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 0
-        let i1: u16 = 0b0001_010_000_0_00_001;
-        let program = vec![ORIG_HEADER, i1];
-        emu.load_program_from_memory(program.as_slice()).unwrap();
-        emu.execute().unwrap();
-        expect_that!(emu.registers.get(0), eq(0x7FFF));
-        expect_that!(emu.registers.get(1), eq(!0x7FFF + 1));
-        expect_that!(emu.registers.get(2), eq(0));
-        expect_that!(
-            emu.registers.get_conditional_register(),
-            eq(ConditionFlag::Zero)
-        );
-    }
-    #[gtest]
-    pub fn test_opcode_and() {
-        let mut emu = Emulator::new();
-        emu.registers.set(0, 0b1101_1001_0111_0101);
-        emu.registers.set(1, 0b0100_1010_0010_1001);
-        // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 0
-        let i1: u16 = 0b0101_010_000_0_00_001;
-        let program = vec![ORIG_HEADER, i1];
-        emu.load_program_from_memory(program.as_slice()).unwrap();
-        emu.execute().unwrap();
-        expect_that!(emu.registers.get(0), eq(0b1101_1001_0111_0101));
-        expect_that!(emu.registers.get(1), eq(0b0100_1010_0010_1001));
-        expect_that!(emu.registers.get(2), eq(0b0100_1000_0010_0001));
-        expect_that!(
-            emu.registers.get_conditional_register(),
-            eq(ConditionFlag::Pos)
-        );
-    }
-    #[gtest]
-    pub fn test_opcode_and_immediate() {
-        let mut emu = Emulator::new();
-        emu.registers.set(0, 0b1101_1001_0111_0101);
-        // Add: DR: 2, SR1: 0, Immediate: true: 21, 0xFFF5 => R2: 0
-        let i1: u16 = 0b0101_010_000_1_10101;
-        let program = vec![ORIG_HEADER, i1];
-        emu.load_program_from_memory(program.as_slice()).unwrap();
-        emu.execute().unwrap();
-        expect_that!(emu.registers.get(0), eq(0b1101_1001_0111_0101));
-        // Immediate sign extended:           0b1111_1111_1111_0101
-        expect_that!(emu.registers.get(2), eq(0b1101_1001_0111_0101));
-        expect_that!(
-            emu.registers.get_conditional_register(),
-            eq(ConditionFlag::Neg)
-        );
-    }
-    #[gtest]
-    pub fn test_opcode_not() {
-        let mut emu = Emulator::new();
-        emu.registers.set(0, 0x7FFF); // largest positive number in 2's complement
-        // Add: DR: 1, SR1: 0 => R1: 0xFFFE
-        let i1: u16 = 0b1001_001_000_111111;
-        let program = vec![ORIG_HEADER, i1];
-        emu.load_program_from_memory(program.as_slice()).unwrap();
-        emu.execute().unwrap();
-        expect_that!(emu.registers.get(0), eq(0x7FFF));
-        expect_that!(emu.registers.get(1), eq(0x8000));
-        expect_that!(
-            emu.registers.get_conditional_register(),
-            eq(ConditionFlag::Neg)
-        );
-    }
-
     #[gtest]
     pub fn test_load_program_disk_hello() {
         let mut emu = Emulator::new();

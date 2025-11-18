@@ -6,8 +6,14 @@ The main goals of it are:
 - Deepen my understanding of Rust by implementing something low-level
 - Learn an easy form of assembly not (only) by writing assembly code but writing an implementation for the LC-3 CPU and its opcodes
 
+## Status
+Implementation of opcodes is still incomplete, see `todo!()` markers in [`opcodes.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/opcodes.rs)
+
+## Contributing
+As this is a learning project for myself I do **not** plan to accept pull requests. If you see issues or have ideas how to improve this project I am happy for every filed issue on that.
+
 ## Helpful links for understanding the LC-3
 - [LC3 Tutor](http://lc3tutor.org/) - Provides information on all opcodes as well as the ability to load programs and step through them, showing the instructions and registers and providing a possibility to step though the instructions
-- [Instruction Set Architecture (ISA)](https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf)
+- [Instruction Set Architecture (ISA)](https://www.jmeiners.com/lc3-vm/supplies/lc3-isa.pdf) - Main documentation of the system to implement
 - [Disassembler](https://github.com/vastopol/disco) - See Shell Wrapper in [`dis/disco`](https://github.com/vastopol/disco/blob/master/dis/disco)
 - [Sign Extension](https://en.wikipedia.org/wiki/Sign_extension) - Method of increasing number of bits of a number represented in [Two's complement](https://en.wikipedia.org/wiki/Two%27s_complement)
