@@ -1,3 +1,4 @@
+use crate::numbers;
 use std::fmt::{Debug, Formatter};
 
 /// Wrapper for LC-3 u16 instruction.
@@ -60,16 +61,26 @@ impl Instruction {
     pub fn get_immediate(self) -> u16 {
         Self::sign_extend(self.get_bit_range(0, 4), 5)
     }
-    /// get the last `len` bits from `0` to `len - 1`
+    /// Offset to add to program counter PC.
+    /// Can be positive or negative.
     #[must_use]
-    pub fn pc_offset(self, len: u8) -> u16 {
-        Self::sign_extend(self.get_bit_range(0, len - 1), len)
+    pub fn pc_offset(self, len: u8) -> i16 {
+        let bin_rep = Self::sign_extend(self.get_bit_range(0, len - 1), len);
+        let res = numbers::twos_complement_to_decimal(bin_rep);
+        #[expect(clippy::cast_possible_truncation)]
+        {
+            debug_assert!(
+                ((-(2 << (len - 1))) as i16..(2 << (len - 1))).contains(&res),
+                "pc_offset out of range"
+            );
+        }
+        res
     }
     /// Implements sign extension as described at [Sign extension](https://en.wikipedia.org/wiki/Sign_extension).
     #[must_use]
     const fn sign_extend(bits: u16, valid_bits: u8) -> u16 {
-        let most_significant_but = bits >> (valid_bits - 1);
-        if most_significant_but == 1 {
+        let most_significant_bit = bits >> (valid_bits - 1);
+        if most_significant_bit == 1 {
             // negative: 1-extend
             bits | (0xFFFF << valid_bits)
         } else {

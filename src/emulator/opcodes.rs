@@ -6,31 +6,31 @@ use crate::hardware::registers::Registers;
     reason = "truncation is what is specified for the LC-3 add opcode"
 )]
 pub fn add(i: Instruction, r: &mut Registers) {
-    r.set(
+    r.set_binary(
         i.dr_number(),
-        (r.get(i.sr1_number()).as_u32()
+        (r.get_binary(i.sr1_number()).as_binary_u32()
             + (if i.is_immediate() {
                 u32::from(i.get_immediate())
             } else {
-                r.get(i.sr2_number()).as_u32()
+                r.get_binary(i.sr2_number()).as_binary_u32()
             })) as u16,
     );
     r.update_conditional_register(i.dr_number());
 }
 pub fn and(i: Instruction, r: &mut Registers) {
-    r.set(
+    r.set_binary(
         i.dr_number(),
-        r.get(i.sr1_number()).as_u16()
+        r.get_binary(i.sr1_number()).as_binary_u16()
             & (if i.is_immediate() {
                 i.get_immediate()
             } else {
-                r.get(i.sr2_number()).as_u16()
+                r.get_binary(i.sr2_number()).as_binary_u16()
             }),
     );
     r.update_conditional_register(i.dr_number());
 }
 pub fn not(i: Instruction, r: &mut Registers) {
-    r.set(i.dr_number(), !r.get(i.sr1_number()).as_u16());
+    r.set_binary(i.dr_number(), !r.get_binary(i.sr1_number()).as_binary_u16());
     r.update_conditional_register(i.dr_number());
 }
 pub fn br(_i: Instruction, _r: &Registers) {
@@ -52,8 +52,10 @@ pub fn ldr(_i: Instruction, _r: &Registers) {
     todo!()
 }
 pub fn lea(i: Instruction, r: &mut Registers) {
-    // We increment the PC only afterward, so add 1 here to get right address
-    r.set(i.dr_number(), r.pc().as_u16() + i.pc_offset(9));
+    r.set_binary(
+        i.dr_number(),
+        (r.pc().as_binary_u16().cast_signed() + i.pc_offset(9)).cast_unsigned(),
+    );
     r.update_conditional_register(i.dr_number());
 }
 pub fn st(_i: Instruction, _r: &Registers) {
@@ -78,74 +80,90 @@ mod tests {
     #[gtest]
     pub fn test_opcode_add() {
         let mut regs = Registers::new();
-        regs.set(0, 22);
-        regs.set(1, 128);
+        regs.set_binary(0, 22);
+        regs.set_binary(1, 128);
         // Add: DR: 2, SR1: 0: 22, Immediate: false, SR2: 1: 128 => R2: 150
         add(0b0001_010_000_0_00_001.into(), &mut regs);
         // Add: DR: 3, SR1: 2: 150, Immediate: true, imm5: 14 => R3: 164
         add(0b0001_011_010_1_01110.into(), &mut regs);
-        expect_that!(regs.get(0), eq(22));
-        expect_that!(regs.get(1), eq(128));
-        expect_that!(regs.get(2), eq(150));
-        expect_that!(regs.get(3), eq(164));
+        expect_that!(regs.get_binary(0), eq(22));
+        expect_that!(regs.get_binary(1), eq(128));
+        expect_that!(regs.get_binary(2), eq(150));
+        expect_that!(regs.get_binary(3), eq(164));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
+    }
+    #[gtest]
+    pub fn test_opcode_add_negative() {
+        let mut regs = Registers::new();
+        regs.set_binary(0, 22);
+        regs.set_decimal(1, -128);
+        // Add: DR: 2, SR1: 0: 22, Immediate: false, SR2: 1: -128 => R2: -106
+        add(0b0001_010_000_0_00_001.into(), &mut regs);
+        // Add: DR: 3, SR1: 2: -106, Immediate: true, imm5: -2 => R3: -108
+        add(0b0001_011_010_1_11110.into(), &mut regs);
+        expect_that!(regs.get_binary(0), eq(22));
+        expect_that!(regs.get_binary(1), eq(0b1111111110000000));
+        expect_that!(regs.get_binary(1).as_decimal(), eq(-128));
+        expect_that!(regs.get_binary(2).as_decimal(), eq(-106));
+        expect_that!(regs.get_binary(3).as_decimal(), eq(-108),);
+        expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
     }
     #[gtest]
     pub fn test_opcode_add_underflow() {
         let mut regs = Registers::new();
-        regs.set(0, 0x7FFF); // largest positive number in 2's complement
-        regs.set(1, 1);
+        regs.set_binary(0, 0x7FFF); // largest positive number in 2's complement
+        regs.set_binary(1, 1);
         // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 32768
         add(0b0001_010_000_0_00_001.into(), &mut regs);
-        expect_that!(regs.get(0), eq(0x7FFF));
-        expect_that!(regs.get(1), eq(1));
-        expect_that!(regs.get(2), eq(32768));
+        expect_that!(regs.get_binary(0), eq(0x7FFF));
+        expect_that!(regs.get_binary(1), eq(1));
+        expect_that!(regs.get_binary(2), eq(32768));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
     }
     #[gtest]
     pub fn test_opcode_add_result_0() {
         let mut regs = Registers::new();
-        regs.set(0, 0x7FFF); // largest positive number in 2's complement
-        regs.set(1, !0x7FFF + 1);
-        regs.set(2, 1); // to be sure opcode was executed
+        regs.set_binary(0, 0x7FFF); // largest positive number in 2's complement
+        regs.set_binary(1, !0x7FFF + 1);
+        regs.set_binary(2, 1); // to be sure opcode was executed
         // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 0
         add(0b0001_010_000_0_00_001.into(), &mut regs);
-        expect_that!(regs.get(0), eq(0x7FFF));
-        expect_that!(regs.get(1), eq(!0x7FFF + 1));
-        expect_that!(regs.get(2), eq(0));
+        expect_that!(regs.get_binary(0), eq(0x7FFF));
+        expect_that!(regs.get_binary(1), eq(!0x7FFF + 1));
+        expect_that!(regs.get_binary(2), eq(0));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Zero));
     }
     #[gtest]
     pub fn test_opcode_and() {
         let mut regs = Registers::new();
-        regs.set(0, 0b1101_1001_0111_0101);
-        regs.set(1, 0b0100_1010_0010_1001);
+        regs.set_binary(0, 0b1101_1001_0111_0101);
+        regs.set_binary(1, 0b0100_1010_0010_1001);
         // Add: DR: 2, SR1: 0, Immediate: false, SR2: 1 => R2: 0
         and(0b0101_010_000_0_00_001.into(), &mut regs);
-        expect_that!(regs.get(0), eq(0b1101_1001_0111_0101));
-        expect_that!(regs.get(1), eq(0b0100_1010_0010_1001));
-        expect_that!(regs.get(2), eq(0b0100_1000_0010_0001));
+        expect_that!(regs.get_binary(0), eq(0b1101_1001_0111_0101));
+        expect_that!(regs.get_binary(1), eq(0b0100_1010_0010_1001));
+        expect_that!(regs.get_binary(2), eq(0b0100_1000_0010_0001));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
     }
     #[gtest]
     pub fn test_opcode_and_immediate() {
         let mut regs = Registers::new();
-        regs.set(0, 0b1101_1001_0111_0101);
+        regs.set_binary(0, 0b1101_1001_0111_0101);
         // Add: DR: 2, SR1: 0, Immediate: true: 21, 0xFFF5 => R2: 0
-        expect_that!(regs.get(0), eq(0b1101_1001_0111_0101));
+        expect_that!(regs.get_binary(0), eq(0b1101_1001_0111_0101));
         // Immediate sign extended:           0b1111_1111_1111_0101
         and(0b0101_010_000_1_10101.into(), &mut regs);
-        expect_that!(regs.get(2), eq(0b1101_1001_0111_0101));
+        expect_that!(regs.get_binary(2), eq(0b1101_1001_0111_0101));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
     }
     #[gtest]
     pub fn test_opcode_not() {
         let mut regs = Registers::new();
-        regs.set(0, 0x7FFF); // largest positive number in 2's complement
+        regs.set_binary(0, 0x7FFF); // largest positive number in 2's complement
         // Add: DR: 1, SR1: 0 => R1: 0xFFFE
         super::not(0b1001_001_000_111111.into(), &mut regs);
-        expect_that!(regs.get(0), eq(0x7FFF));
-        expect_that!(regs.get(1), eq(0x8000));
+        expect_that!(regs.get_binary(0), eq(0x7FFF));
+        expect_that!(regs.get_binary(1), eq(0x8000));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
     }
     #[gtest]
@@ -154,7 +172,7 @@ mod tests {
         regs.set_pc(0x3045);
         // Lea: DR: 3, SR1: 0 => R1: 0xFFFE
         super::lea(0b1110_011_0_0101_0101.into(), &mut regs);
-        expect_that!(regs.get(3), eq(0x3045 + 0b0_0101_0101));
+        expect_that!(regs.get_binary(3), eq(0x3045 + 0b0_0101_0101));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
     }
 }

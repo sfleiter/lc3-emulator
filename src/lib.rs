@@ -20,3 +20,4 @@
 pub mod emulator;
 pub mod errors;
 pub(crate) mod hardware;
+pub(crate) mod numbers;

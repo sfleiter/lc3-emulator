@@ -1,22 +1,28 @@
+use crate::numbers;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
 
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Register(u16);
 impl Register {
-    pub const fn as_u16(self) -> u16 {
+    pub const fn as_binary_u16(self) -> u16 {
         self.0
     }
-    pub fn as_u32(self) -> u32 {
+    pub fn as_binary_u32(self) -> u32 {
         u32::from(self.0)
+    }
+    pub fn as_decimal(self) -> i16 {
+        numbers::twos_complement_to_decimal(self.0)
     }
 }
 impl Debug for Register {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "({:#06X} {:#018b} {:05})",
-            self.0, self.0, self.0 /* TODO calculate 2's complement */
+            "({:#06X} {:#018b} {})",
+            self.0,
+            self.0,
+            self.as_decimal()
         )
     }
 }
@@ -57,27 +63,41 @@ impl Registers {
     pub const fn pc(&self) -> Register {
         self.pc
     }
-    pub const fn inc_pc(&mut self) {
-        self.pc.0 += 1;
+    pub fn inc_pc(&mut self) {
+        self.set_pc(self.pc.0 + 1);
     }
-    #[cfg(test)]
     pub fn set_pc(&mut self, val: u16) {
+        debug_assert!(
+            // 0xFE00 is only allowed since the PC is incremented before executing the current instruction
+            (0x3000..=0xFE00).contains(&val),
+            "Program Counter (PC) must be between 0x3000 and 0xFE00, but is: {val}"
+        );
         self.pc = val.into();
     }
-    pub fn get(&self, r: u8) -> Register {
-        assert!(r <= 7, "Invalid general purpose register get");
+    pub fn get_binary(&self, r: u8) -> Register {
+        debug_assert!(r <= 7, "Invalid general purpose register get");
         self.general_purpose[usize::from(r)]
     }
-    pub fn set(&mut self, r: u8, value: u16) {
-        assert!(r <= 7, "Invalid general purpose register set");
+    pub fn set_binary(&mut self, r: u8, value: u16) {
+        debug_assert!(r <= 7, "Invalid general purpose register set");
         self.general_purpose[usize::from(r)] = Register(value);
+    }
+    #[cfg(test)]
+    pub fn set_decimal(&mut self, r: u8, value: i16) {
+        let reg_value: u16 = if value >= 0 {
+            u16::try_from(value)
+                .expect("Impossible error during conversion from positive i16 to u16")
+        } else {
+            !value.abs().cast_unsigned() + 1
+        };
+        self.set_binary(r, reg_value);
     }
     #[cfg(test)]
     pub const fn get_conditional_register(&self) -> ConditionFlag {
         self.cond
     }
     pub fn update_conditional_register(&mut self, r: u8) {
-        let val = self.get(r);
+        let val = self.get_binary(r);
         self.cond = ConditionFlag::from(val);
     }
 }

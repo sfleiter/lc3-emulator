@@ -167,7 +167,7 @@ impl Emulator {
         self.enforce_state(&EmulatorState::Loaded)?;
         self.state = EmulatorState::Executed;
         while self.registers.pc() < self.memory.program_end() {
-            let data = self.memory.memory()?[usize::from(self.registers.pc().as_u16())];
+            let data = self.memory.memory()?[usize::from(self.registers.pc().as_binary_u16())];
             let i = Instruction::from(data);
             // println!("{i:?}");
             self.registers.inc_pc();
@@ -224,7 +224,7 @@ impl Emulator {
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
             0x22 => {
-                let address = usize::from(self.registers.get(0).as_u16());
+                let address = usize::from(self.registers.get_binary(0).as_binary_u16());
                 let mut end = address;
                 let mem = self
                     .memory
