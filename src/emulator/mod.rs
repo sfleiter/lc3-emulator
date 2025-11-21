@@ -170,10 +170,10 @@ impl Emulator {
             let data = self.memory.memory()?[usize::from(self.registers.pc().as_u16())];
             let i = Instruction::from(data);
             // println!("{i:?}");
+            self.registers.inc_pc();
             if let Some(res) = self.execute_instruction(i, writer).break_value() {
                 return res;
             }
-            self.registers.inc_pc();
         }
         writer.flush().expect("Could not flush output writer");
         Ok(())

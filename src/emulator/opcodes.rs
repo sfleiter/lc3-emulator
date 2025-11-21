@@ -53,7 +53,7 @@ pub fn ldr(_i: Instruction, _r: &Registers) {
 }
 pub fn lea(i: Instruction, r: &mut Registers) {
     // We increment the PC only afterward, so add 1 here to get right address
-    r.set(i.dr_number(), r.pc().as_u16() + i.pc_offset(9) + 1);
+    r.set(i.dr_number(), r.pc().as_u16() + i.pc_offset(9));
     r.update_conditional_register(i.dr_number());
 }
 pub fn st(_i: Instruction, _r: &Registers) {
@@ -154,7 +154,7 @@ mod tests {
         regs.set_pc(0x3045);
         // Lea: DR: 3, SR1: 0 => R1: 0xFFFE
         super::lea(0b1110_011_0_0101_0101.into(), &mut regs);
-        expect_that!(regs.get(3), eq(0x3045 + 1 + 0b0_0101_0101));
+        expect_that!(regs.get(3), eq(0x3045 + 0b0_0101_0101));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
     }
 }
