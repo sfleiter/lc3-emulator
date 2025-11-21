@@ -7,8 +7,6 @@ use std::fmt::{Debug, Formatter};
 pub struct Instruction(u16);
 
 impl Instruction {
-    const MAX_INDEX: u8 = 15;
-
     /// Gives the value of only the specified bit range.
     ///
     /// # Parameters
@@ -16,17 +14,17 @@ impl Instruction {
     /// - `to`: end index (inclusive), mut be greater or equal to `from`
     ///
     /// # Panics
-    /// - asserts that to is greater or equal from
+    /// - asserts that to is greater or equal from and both are valid indexes
     #[must_use]
     pub fn get_bit_range(self, from: u8, to: u8) -> u16 {
-        assert!(
+        debug_assert!(
             to >= from,
             "wrong direction of from: {from:?} and to: {to:?}"
         );
-        assert!(
-            to <= Self::MAX_INDEX,
+        debug_assert!(
+            (00..u16::BITS).contains(&u32::from(to)),
             "index: {to:?} to u16 is greater than maximum value {:?}",
-            Self::MAX_INDEX
+            u16::BITS - 1
         );
         (self.0 >> from) & ((0b1 << (to - from + 1)) - 1)
     }
@@ -37,6 +35,10 @@ impl Instruction {
     #[must_use]
     pub fn get_bit_range_u8(self, from: u8, to: u8, expect: &str) -> u8 {
         u8::try_from(self.get_bit_range(from, to)).expect(expect)
+    }
+    #[must_use]
+    pub fn get_bit(self, index: u8) -> bool {
+        self.get_bit_range(index, index) & 1 != 0
     }
     #[must_use]
     pub fn op_code(self) -> u8 {

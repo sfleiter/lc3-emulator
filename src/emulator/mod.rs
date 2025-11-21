@@ -167,7 +167,7 @@ impl Emulator {
         self.enforce_state(&EmulatorState::Loaded)?;
         self.state = EmulatorState::Executed;
         while self.registers.pc() < self.memory.program_end() {
-            let data = self.memory.memory()?[usize::from(self.registers.pc().as_binary_u16())];
+            let data = self.memory[self.registers.pc().as_binary_u16()];
             let i = Instruction::from(data);
             // println!("{i:?}");
             self.registers.inc_pc();
@@ -197,7 +197,9 @@ impl Emulator {
                 opcodes::jmp_or_ret(instruction, &mut self.registers);
             }
             o if o == Operation::Jsr as u8 => opcodes::jsr(instruction, &mut self.registers),
-            o if o == Operation::Ld as u8 => opcodes::ld(instruction, &mut self.registers),
+            o if o == Operation::Ld as u8 => {
+                opcodes::ld(instruction, &mut self.registers, &self.memory);
+            }
             o if o == Operation::Ldi as u8 => opcodes::ldi(instruction, &mut self.registers),
             o if o == Operation::Ldr as u8 => opcodes::ldr(instruction, &mut self.registers),
             o if o == Operation::Lea as u8 => opcodes::lea(instruction, &mut self.registers),
@@ -224,20 +226,15 @@ impl Emulator {
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
             0x22 => {
-                let address = usize::from(self.registers.get_binary(0).as_binary_u16());
+                let address = self.registers.get_binary(0).as_binary_u16();
                 let mut end = address;
-                let mem = self
-                    .memory
-                    .memory()
-                    // TODO fixed by refactoring to state machine
-                    .expect("Memory not available, is a program loaded?");
                 let mut s = String::with_capacity(120);
-                while mem[end] != 0 {
+                while self.memory[end] != 0 {
                     #[expect(
                         clippy::cast_possible_truncation,
                         reason = "Truncation is what is expected here"
                     )]
-                    let c = (mem[end] as u8) as char;
+                    let c = (self.memory[end] as u8) as char;
                     s.push(c);
                     end += 1;
                 }
@@ -332,6 +329,15 @@ mod tests {
         }
         emu.execute_with_writer(&mut sw).unwrap();
         assert_that!(sw.get_string(), eq("HelloWorld!\n"));
+        // TODO add more assertions for further content
+    }
+    #[gtest]
+    pub fn test_program_add_ld_break_times_ten() {
+        let mut emu = Emulator::new();
+        emu.load_program("examples/times_ten.o").unwrap();
+        emu.execute().unwrap();
+        assert_that!(emu.registers.get_binary(2), eq(0));
+        assert_that!(emu.registers.get_binary(3).as_binary_u16(), eq(30));
         // TODO add more assertions for further content
     }
     #[gtest]

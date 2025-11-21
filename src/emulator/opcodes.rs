@@ -1,5 +1,6 @@
 use crate::emulator::instruction::Instruction;
-use crate::hardware::registers::Registers;
+use crate::hardware::memory::Memory;
+use crate::hardware::registers::{ConditionFlag, Registers};
 
 #[allow(
     clippy::cast_possible_truncation,
@@ -33,8 +34,17 @@ pub fn not(i: Instruction, r: &mut Registers) {
     r.set_binary(i.dr_number(), !r.get_binary(i.sr1_number()).as_binary_u16());
     r.update_conditional_register(i.dr_number());
 }
-pub fn br(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn br(i: Instruction, r: &mut Registers) {
+    let none_set = i.get_bit_range(9, 11) == 0;
+    let do_break = none_set
+        || match r.get_conditional_register() {
+            ConditionFlag::Pos => i.get_bit(9),
+            ConditionFlag::Zero => i.get_bit(10),
+            ConditionFlag::Neg => i.get_bit(11),
+        };
+    if do_break {
+        r.set_pc((r.pc().as_decimal() + i.pc_offset(9)).cast_unsigned());
+    }
 }
 pub fn jmp_or_ret(_i: Instruction, _r: &Registers) {
     todo!()
@@ -42,9 +52,17 @@ pub fn jmp_or_ret(_i: Instruction, _r: &Registers) {
 pub fn jsr(_i: Instruction, _r: &Registers) {
     todo!()
 }
-pub fn ld(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn ld(i: Instruction, r: &mut Registers, memory: &Memory) {
+    let value = memory[address_by_pc_offset(r, i.pc_offset(9))];
+    r.set_binary(i.dr_number(), value);
+    r.update_conditional_register(i.dr_number());
 }
+
+fn address_by_pc_offset(r: &Registers, offset: i16) -> u16 {
+    let address = r.pc().as_decimal() + offset;
+    address.cast_unsigned()
+}
+
 pub fn ldi(_i: Instruction, _r: &Registers) {
     todo!()
 }
@@ -102,7 +120,7 @@ mod tests {
         // Add: DR: 3, SR1: 2: -106, Immediate: true, imm5: -2 => R3: -108
         add(0b0001_011_010_1_11110.into(), &mut regs);
         expect_that!(regs.get_binary(0), eq(22));
-        expect_that!(regs.get_binary(1), eq(0b1111111110000000));
+        expect_that!(regs.get_binary(1), eq(0b1111_1111_1000_0000));
         expect_that!(regs.get_binary(1).as_decimal(), eq(-128));
         expect_that!(regs.get_binary(2).as_decimal(), eq(-106));
         expect_that!(regs.get_binary(3).as_decimal(), eq(-108),);
@@ -171,8 +189,24 @@ mod tests {
         let mut regs = Registers::new();
         regs.set_pc(0x3045);
         // Lea: DR: 3, SR1: 0 => R1: 0xFFFE
-        super::lea(0b1110_011_0_0101_0101.into(), &mut regs);
+        lea(0b1110_011_0_0101_0101.into(), &mut regs);
         expect_that!(regs.get_binary(3), eq(0x3045 + 0b0_0101_0101));
+        expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
+    }
+    #[gtest]
+    pub fn test_opcode_ld() {
+        let mut regs = Registers::new();
+        regs.set_pc(0x3045);
+        let raw = vec![4711u16, 815];
+        let memory = Memory::with_program(&raw).expect("Error loading program");
+        // LD - DR: 4, PC_OFFSET9: -0x44
+        ld(0b0010_100_1_1011_1100.into(), &mut regs, &memory);
+        expect_that!(regs.get_binary(4).as_decimal(), eq(815));
+        expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
+
+        // LD - DR: 4, PC_OFFSET9: -0x45
+        ld(0b0010_100_1_1011_1011.into(), &mut regs, &memory);
+        expect_that!(regs.get_binary(4).as_decimal(), eq(4711));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
     }
 }

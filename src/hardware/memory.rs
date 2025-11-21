@@ -1,6 +1,7 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::ProgramTooLong;
 use std::fmt::{Debug, Formatter};
+use std::ops::{Index, IndexMut};
 
 pub const PROGRAM_SECTION_START: u16 = 0x3000;
 pub const PROGRAM_SECTION_END: u16 = 0xFDFF;
@@ -28,6 +29,26 @@ impl Debug for Memory {
         }
     }
 }
+
+impl Index<u16> for Memory {
+    type Output = u16;
+    fn index(&self, index: u16) -> &Self::Output {
+        assert!(
+            self.is_valid_address(index),
+            "Address not in program space when indexing"
+        );
+        &self.data[usize::from(index)]
+    }
+}
+impl IndexMut<u16> for Memory {
+    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
+        assert!(
+            self.is_valid_address(index),
+            "Address not in program space when mut indexing"
+        );
+        &mut self.data[usize::from(index)]
+    }
+}
 impl Memory {
     pub fn new() -> Self {
         let data = vec![0x0u16; usize::from(MEMORY_SIZE_U16)];
@@ -36,7 +57,12 @@ impl Memory {
             instruction_count: 0,
         }
     }
-
+    #[cfg(test)]
+    pub(crate) fn with_program(program: &Vec<u16>) -> Result<Self, Lc3EmulatorError> {
+        let mut res = Self::new();
+        res.load_program(program.as_ref())?;
+        Ok(res)
+    }
     /// Loads a program without an `.ORIG` header into the memory section
     /// starting from address `_PROGRAM_SECTION_START_BYTES`
     /// and returns an iterator over the loaded instructions.
@@ -67,11 +93,7 @@ impl Memory {
             Err(Lc3EmulatorError::ProgramNotLoaded)
         }
     }
-    pub const fn memory(&self) -> Result<&[u16], Lc3EmulatorError> {
-        if self.instruction_count != 0 {
-            Ok(self.data.as_slice())
-        } else {
-            Err(Lc3EmulatorError::ProgramNotLoaded)
-        }
+    fn is_valid_address(&self, address: u16) -> bool {
+        (PROGRAM_SECTION_START..(PROGRAM_SECTION_START + self.instruction_count)).contains(&address)
     }
 }

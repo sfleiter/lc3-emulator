@@ -1,3 +1,4 @@
+use crate::hardware::memory;
 use crate::numbers;
 use std::cmp::Ordering;
 use std::fmt::{Debug, Formatter};
@@ -68,8 +69,9 @@ impl Registers {
     }
     pub fn set_pc(&mut self, val: u16) {
         debug_assert!(
-            // 0xFE00 is only allowed since the PC is incremented before executing the current instruction
-            (0x3000..=0xFE00).contains(&val),
+            // one behind valid addresses allowed since the PC is incremented
+            // before executing the current instruction
+            (memory::PROGRAM_SECTION_START..=(memory::PROGRAM_SECTION_END + 1)).contains(&val),
             "Program Counter (PC) must be between 0x3000 and 0xFE00, but is: {val}"
         );
         self.pc = val.into();
@@ -92,7 +94,6 @@ impl Registers {
         };
         self.set_binary(r, reg_value);
     }
-    #[cfg(test)]
     pub const fn get_conditional_register(&self) -> ConditionFlag {
         self.cond
     }
