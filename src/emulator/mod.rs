@@ -4,9 +4,8 @@ mod opcodes;
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
-use crate::hardware::registers::Registers;
+use crate::hardware::registers::{Registers, from_binary};
 use instruction::Instruction;
-use std::cmp::PartialEq;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io::{BufReader, Read, Write, stdout};
@@ -166,8 +165,8 @@ impl Emulator {
     fn execute_with_writer(&mut self, writer: &mut impl Write) -> Result<(), Lc3EmulatorError> {
         self.enforce_state(&EmulatorState::Loaded)?;
         self.state = EmulatorState::Executed;
-        while self.registers.pc() < self.memory.program_end() {
-            let data = self.memory[self.registers.pc().as_binary_u16()];
+        while self.registers.pc() < from_binary(self.memory.program_end()) {
+            let data = self.memory[self.registers.pc().as_binary()];
             let i = Instruction::from(data);
             // println!("{i:?}");
             self.registers.inc_pc();
@@ -227,7 +226,7 @@ impl Emulator {
         match trap_routine {
             0x22 => {
                 // PUTS: print null-delimited char* from register 0's address
-                let address = self.registers.get_binary(0).as_binary_u16();
+                let address = self.registers.get(0).as_binary();
                 let mut end = address;
                 let mut s = String::with_capacity(120);
                 while self.memory[end] != 0 {
@@ -284,6 +283,7 @@ fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
 mod tests {
     use crate::emulator::{Emulator, ORIG_HEADER, Operation};
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
+    use crate::hardware::registers::from_binary;
     use googletest::prelude::*;
     use std::io::Write;
 
@@ -340,8 +340,8 @@ mod tests {
         let mut emu = Emulator::new();
         emu.load_program("examples/times_ten.o").unwrap();
         emu.execute().unwrap();
-        assert_that!(emu.registers.get_binary(2), eq(0));
-        assert_that!(emu.registers.get_binary(3).as_binary_u16(), eq(30));
+        assert_that!(emu.registers.get(2), eq(from_binary(0)));
+        assert_that!(emu.registers.get(3), eq(from_binary(30)));
         // TODO add more assertions for further content
     }
     #[gtest]

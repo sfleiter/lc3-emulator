@@ -61,13 +61,13 @@ impl Instruction {
         self.get_bit_range(5, 5) == 1
     }
     pub fn get_immediate(self) -> u16 {
-        Self::sign_extend(self.get_bit_range(0, 4), 5)
+        numbers::sign_extend(self.get_bit_range(0, 4), 5)
     }
     /// Offset to add to program counter PC.
     /// Can be positive or negative.
     #[must_use]
     pub fn pc_offset(self, len: u8) -> i16 {
-        let bin_rep = Self::sign_extend(self.get_bit_range(0, len - 1), len);
+        let bin_rep = numbers::sign_extend(self.get_bit_range(0, len - 1), len);
         let res = numbers::twos_complement_to_decimal(bin_rep);
         #[expect(clippy::cast_possible_truncation)]
         {
@@ -77,18 +77,6 @@ impl Instruction {
             );
         }
         res
-    }
-    /// Implements sign extension as described at [Sign extension](https://en.wikipedia.org/wiki/Sign_extension).
-    #[must_use]
-    const fn sign_extend(bits: u16, valid_bits: u8) -> u16 {
-        let most_significant_bit = bits >> (valid_bits - 1);
-        if most_significant_bit == 1 {
-            // negative: 1-extend
-            bits | (0xFFFF << valid_bits)
-        } else {
-            // positive, already 0-extended
-            bits
-        }
     }
 }
 
