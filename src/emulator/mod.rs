@@ -226,6 +226,7 @@ impl Emulator {
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
             0x22 => {
+                // PUTS: print null-delimited char* from register 0's address
                 let address = self.registers.get_binary(0).as_binary_u16();
                 let mut end = address;
                 let mut s = String::with_capacity(120);
@@ -238,12 +239,15 @@ impl Emulator {
                     s.push(c);
                     end += 1;
                 }
-                writer
-                    .write_fmt(format_args!("{s}\n"))
-                    .expect("Could not write output"); // TODO
-                ControlFlow::Continue(())
+                match writeln!(writer, "{s}") {
+                    Ok(()) => ControlFlow::Continue(()),
+                    Err(e) => {
+                        ControlFlow::Break(Err(Lc3EmulatorError::IOStdoutError(e.to_string())))
+                    }
+                }
             }
             0x25 => {
+                // HALT
                 println!("\nProgram halted");
                 ControlFlow::Break(Ok(()))
             }

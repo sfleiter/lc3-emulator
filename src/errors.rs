@@ -25,6 +25,8 @@ pub enum Lc3EmulatorError {
     },
     #[error("Invalid instruction opcode: 0b{0:04b}")]
     InvalidInstruction(u8),
+    #[error("Could not write to output: {0}")]
+    IOStdoutError(String),
 }
 
 impl Debug for Lc3EmulatorError {

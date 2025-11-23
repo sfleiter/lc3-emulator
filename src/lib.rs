@@ -1,7 +1,6 @@
 //! # LC-3 Emulator.
 //!
 //! `lc3-emulator` is an emulator of the LC-3 system.
-//! See TODO Spec and other doc Link.
 //! Usage starts with loading a program via `hardware::Emulator::load_program`.
 //!
 //!  # Example
