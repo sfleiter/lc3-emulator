@@ -1,7 +1,7 @@
 use crate::errors::Lc3EmulatorError;
 use crate::errors::Lc3EmulatorError::ProgramTooLong;
 use std::fmt::{Debug, Formatter};
-use std::ops::{Index, IndexMut};
+use std::ops::Index;
 
 pub const PROGRAM_SECTION_START: u16 = 0x3000;
 pub const PROGRAM_SECTION_END: u16 = 0xFDFF;
@@ -38,15 +38,6 @@ impl Index<u16> for Memory {
             "Address not in program space when indexing: {index:#06X}"
         );
         &self.data[usize::from(index)]
-    }
-}
-impl IndexMut<u16> for Memory {
-    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
-        assert!(
-            self.is_valid_address(index),
-            "Address not in program space when mut indexing"
-        );
-        &mut self.data[usize::from(index)]
     }
 }
 impl Memory {
