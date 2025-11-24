@@ -48,9 +48,11 @@ to improve this project I am happy for every filed issue on that, though.
     - Verify the code with clippy according to config
       in [Cargo.toml](https://github.com/sfleiter/lc3-emulator/blob/main/Cargo.toml)
     - Check formatting agrees with `rustfmt` (default) configuration
+    - Generate README.md from template
   - Daily
     - Audit dependencies for security issues
   - Weekly
+    - Create Pull Requests for possible updates of all Rust dependencies and GitHub actions
     - [CodeQL](https://github.com/github/codeql?tab=readme-ov-file#codeql) scanning for GitHub Actions and code
       - For Rust code there is the warning `Low Rust analysis quality` generated which seems to be caused by the
         issue [20643](https://github.com/github/codeql/issues/20643) tracked in the CodeQL project
