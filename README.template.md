@@ -17,6 +17,13 @@ Implementation of opcodes and trap routines is still incomplete, see `todo!()` m
 `opcodes.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/opcodes.rs)
 and [`emulator/mod.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/mod.rs)
 
+## Usage
+
+Compile and run as usual.
+
+Minimum Supported Rust Version (MSRV): is `__MSRV__`,
+see [Rust Reference](https://doc.rust-lang.org/cargo/reference/rust-version.html#rust-version).
+
 ## Contributing
 
 As this is a learning project for myself I do **not** plan to accept pull requests. If you see issues or have ideas how

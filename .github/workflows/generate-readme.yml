@@ -1,0 +1,27 @@
+name: Generate README.md
+permissions:
+  contents: write
+on:
+  workflow_call:
+    inputs:
+      msrv:
+        required: true
+        type: string
+jobs:
+  generate-readme:
+    name: Generate README.md from README.template.md and commit changes if any
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - env:
+          MSRV_VERSION: ${{ inputs.msrv }}
+        run: |
+          echo "MSRV_VERSION = $MSRV_VERSION"
+          sed -e "s/__MSRV__/${MSRV_VERSION}/g" README.template.md > README.md
+          if [[ "$(git status --porcelain)" != "" ]]; then
+            git config user.name "GitHub Action"
+            git config user.email "action@github.com"
+            git add .
+            git commit -m "Auto-update README.md"
+            git push
+          fi

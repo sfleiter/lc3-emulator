@@ -1,4 +1,3 @@
-# https://github.com/actions-rust-lang/setup-rust-toolchain
 name: Rust
 permissions:
   contents: read
@@ -15,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # https://github.com/actions-rust-lang/setup-rust-toolchain
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           components: clippy
@@ -27,12 +27,25 @@ jobs:
   msrv:
     name: Verify Minimum Stable Rust Version (MSRV) guarantee
     runs-on: ubuntu-latest
+    outputs:
+      msrv-version: ${{ steps.msrv-version.outputs.version }}
     steps:
       - uses: actions/checkout@v5
       - uses: cargo-bins/cargo-binstall@main
       - run: |
           cargo binstall --no-confirm cargo-msrv --locked
           cargo-msrv verify
+      - id: msrv-version
+        run: |
+          version=$(cargo-msrv show --output-format minimal)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+  call-generate-readme:
+    permissions:
+      contents: write
+    needs: msrv
+    uses: ./.github/workflows/generate-readme.yml
+    with:
+      msrv: ${{ needs.msrv.outputs.msrv-version }}
   formatting:
     name: cargo fmt
     runs-on: ubuntu-latest
