@@ -12,7 +12,7 @@ jobs:
     name: Generate README.md from README.template.md and commit changes if any
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - env:
           MSRV_VERSION: ${{ inputs.msrv }}
         run: |
