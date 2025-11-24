@@ -322,6 +322,16 @@ mod tests {
         );
     }
     #[gtest]
+    pub fn test_load_program_wrong_header() {
+        let mut emu = Emulator::new();
+        assert_that!(
+            emu.load_program_from_memory(vec![0x3001].as_mut_slice())
+                .unwrap_err()
+                .to_string(),
+            eq("Program is not loaded at 0x3000' but 0x3001")
+        );
+    }
+    #[gtest]
     pub fn test_load_program_disk_hello() {
         let mut sw = StringWriter::new();
         let mut emu = Emulator::new();
