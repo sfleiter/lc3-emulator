@@ -1,3 +1,4 @@
+# https://github.com/actions-rust-lang/setup-rust-toolchain
 name: Rust
 permissions:
   contents: read
@@ -23,7 +24,15 @@ jobs:
         run: cargo build
       - name: Run tests
         run: cargo test
-  # Check formatting with rustfmt
+  msrv:
+    name: Verify Minimum Stable Rust Version (MSRV) guarantee
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cargo-bins/cargo-binstall@main
+      - run: |
+          cargo binstall --no-confirm cargo-msrv --locked
+          cargo-msrv verify
   formatting:
     name: cargo fmt
     runs-on: ubuntu-latest
