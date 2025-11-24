@@ -72,17 +72,23 @@ impl Registers {
             // one behind valid addresses allowed since the PC is incremented
             // before executing the current instruction
             (memory::PROGRAM_SECTION_START..=(memory::PROGRAM_SECTION_END + 1)).contains(&val),
-            "Program Counter (PC) must be between 0x3000 and 0xFE00, but is: {val}"
+            "Program Counter (PC) must be between 0x3000 and 0xFE00, but is: {val:#06X}"
         );
         self.pc = Register::from_binary(val);
     }
     #[must_use]
     pub fn get(&self, r: u8) -> Register {
-        debug_assert!(r <= 7, "Invalid general purpose register get");
+        debug_assert!(
+            r <= 7,
+            "Invalid general purpose register get {r}, must be 0 to 7"
+        );
         self.general_purpose[usize::from(r)]
     }
     pub fn set(&mut self, r: u8, value: Register) {
-        debug_assert!(r <= 7, "Invalid general purpose register set");
+        debug_assert!(
+            r <= 7,
+            "Invalid general purpose register set {r}, must be 0 to 7"
+        );
         self.general_purpose[usize::from(r)] = value;
     }
     #[must_use]

@@ -35,7 +35,7 @@ impl Index<u16> for Memory {
     fn index(&self, index: u16) -> &Self::Output {
         assert!(
             self.is_valid_address(index),
-            "Address not in program space when indexing"
+            "Address not in program space when indexing: {index:#06X}"
         );
         &self.data[usize::from(index)]
     }

@@ -73,7 +73,7 @@ impl Instruction {
         {
             debug_assert!(
                 ((-(2 << (len - 1))) as i16..(2 << (len - 1))).contains(&res),
-                "pc_offset out of range"
+                "pc_offset out of range: {res}"
             );
         }
         res

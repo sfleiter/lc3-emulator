@@ -238,7 +238,7 @@ impl Emulator {
                     s.push(c);
                     end += 1;
                 }
-                match writeln!(writer, "{s}") {
+                match writeln!(writer, "{s}").and_then(|()| writer.flush()) {
                     Ok(()) => ControlFlow::Continue(()),
                     Err(e) => {
                         ControlFlow::Break(Err(Lc3EmulatorError::IOStdoutError(e.to_string())))
@@ -251,7 +251,7 @@ impl Emulator {
                 ControlFlow::Break(Ok(()))
             }
             _ => {
-                eprintln!("Trap routine 0x{trap_routine:02X} not implemented yet");
+                eprintln!("Trap routine {trap_routine:#04X} not implemented yet");
                 todo!()
             }
         }
