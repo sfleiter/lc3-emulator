@@ -2,7 +2,6 @@ mod instruction;
 mod opcodes;
 
 use crate::errors::Lc3EmulatorError;
-use crate::errors::Lc3EmulatorError::{ProgramLoadedAtWrongAddress, ProgramMissingOrigHeader};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
 use instruction::Instruction;
@@ -41,19 +40,21 @@ pub struct Emulator {
     registers: Registers,
 }
 
-fn from_program_byes(program: &[u16]) -> Result<Emulator, Lc3EmulatorError> {
-    let Some((header, rest)) = program.split_at_checked(1) else {
-        return Err(ProgramMissingOrigHeader);
+fn from_program_byes(data: &[u16]) -> Result<Emulator, Lc3EmulatorError> {
+    let [header, program @ ..] = data else {
+        return Err(Lc3EmulatorError::ProgramMissingOrigHeader);
     };
-    if header[0] != ORIG_HEADER {
-        let result = Err(ProgramLoadedAtWrongAddress {
-            actual_address: header[0],
+    if *header != ORIG_HEADER {
+        return Err(Lc3EmulatorError::ProgramLoadedAtWrongAddress {
+            actual_address: *header,
             expected_address: PROGRAM_SECTION_START,
         });
-        return result;
+    }
+    if program.is_empty() {
+        return Err(Lc3EmulatorError::ProgramEmpty);
     }
     let mut memory = Memory::new();
-    memory.load_program(rest)?;
+    memory.load_program(program)?;
     Ok(Emulator {
         memory,
         registers: Registers::new(),

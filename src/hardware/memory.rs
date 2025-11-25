@@ -1,5 +1,4 @@
 use crate::errors::Lc3EmulatorError;
-use crate::errors::Lc3EmulatorError::ProgramTooLong;
 use std::fmt::{Debug, Formatter};
 use std::ops::Index;
 
@@ -62,7 +61,7 @@ impl Memory {
     /// - Program too long
     pub fn load_program(&mut self, data: &[u16]) -> Result<(), Lc3EmulatorError> {
         if data.len() > usize::from(PROGRAM_SECTION_MAX_INSTRUCTION_COUNT) {
-            return Err(ProgramTooLong {
+            return Err(Lc3EmulatorError::ProgramTooLong {
                 actual_instructions: data.len(),
                 maximum_instructions: PROGRAM_SECTION_MAX_INSTRUCTION_COUNT,
             });

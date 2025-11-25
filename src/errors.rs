@@ -4,14 +4,16 @@ use thiserror::Error;
 #[rustfmt::skip]
 #[derive(Error, PartialEq, Eq)]
 pub enum Lc3EmulatorError {
-    #[error("Program needs to be even size in bytes to contain valid u16 instructions, but is {0} bytes long")]
+    #[error("Program is missing valid .ORIG header")]
+    ProgramMissingOrigHeader,
+    #[error("Program is missing valid .ORIG header")]
+    ProgramEmpty,
+    #[error("Loading an empty programm is not allowed")]
     ProgramNotEvenSize(u64),
     #[error("Program does not fit into memory, file size: {0} is greater than usize")]
     ProgramDoesNotFitIntoMemory(u64),
     #[error("Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}")]
     ProgramTooLong { actual_instructions: usize, maximum_instructions: u16 },
-    #[error("Program is missing valid .ORIG header")]
-    ProgramMissingOrigHeader,
     #[error("Program is not loaded at 0x{expected_address:04X?}' but 0x{actual_address:04X?}")]
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
     #[error("Cannot read program from file '{file}': {message}")]
