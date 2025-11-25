@@ -17,16 +17,12 @@ pub struct Memory {
 }
 impl Debug for Memory {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.program_slice() {
-            Ok(p) => {
-                let ins = p.len();
-                write!(f, "Instructions: {ins:?}, Program section contents: {p:?}")
-            }
-            Err(e) => match e {
-                Lc3EmulatorError::ProgramNotLoaded => write!(f, "Program not yet loaded"),
-                _ => write!(f, "Error: {e:?}"),
-            },
-        }
+        let slice = self.program_slice();
+        write!(
+            f,
+            "Instructions: {:?}, Program section contents: {slice:?}",
+            slice.len()
+        )
     }
 }
 
@@ -80,12 +76,8 @@ impl Memory {
     pub const fn program_end(&self) -> u16 {
         PROGRAM_SECTION_START + self.instruction_count
     }
-    pub fn program_slice(&self) -> Result<&[u16], Lc3EmulatorError> {
-        if self.instruction_count != 0 {
-            Ok(&self.data[usize::from(PROGRAM_SECTION_START)
-                ..usize::from(PROGRAM_SECTION_START + self.instruction_count)])
-        } else {
-            Err(Lc3EmulatorError::ProgramNotLoaded)
-        }
+    pub fn program_slice(&self) -> &[u16] {
+        &self.data[usize::from(PROGRAM_SECTION_START)
+            ..usize::from(PROGRAM_SECTION_START + self.instruction_count)]
     }
 }

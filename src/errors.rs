@@ -4,10 +4,6 @@ use thiserror::Error;
 #[rustfmt::skip]
 #[derive(Error, PartialEq, Eq)]
 pub enum Lc3EmulatorError {
-    #[error("Emulator can only load and execute once, please use a fresh instance, then load and finally execute")]
-    WrongState,
-    #[error("Program not loaded yet")]
-    ProgramNotLoaded,
     #[error("Program needs to be even size in bytes to contain valid u16 instructions, but is {0} bytes long")]
     ProgramNotEvenSize(u64),
     #[error("Program does not fit into memory, file size: {0} is greater than usize")]

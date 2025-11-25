@@ -35,122 +35,86 @@ enum Operation {
     _Reserved = 0b1101,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum EmulatorState {
-    Start,
-    Loaded,
-    Executed,
-}
 /// The public facing emulator used to run LC-3 programs.
 pub struct Emulator {
     memory: Memory,
     registers: Registers,
-    state: EmulatorState,
 }
-impl Default for Emulator {
-    fn default() -> Self {
-        Self::new()
+
+fn from_program_byes(program: &[u16]) -> Result<Emulator, Lc3EmulatorError> {
+    let Some((header, rest)) = program.split_at_checked(1) else {
+        return Err(ProgramMissingOrigHeader);
+    };
+    if header[0] != ORIG_HEADER {
+        let result = Err(ProgramLoadedAtWrongAddress {
+            actual_address: header[0],
+            expected_address: PROGRAM_SECTION_START,
+        });
+        return result;
+    }
+    let mut memory = Memory::new();
+    memory.load_program(rest)?;
+    Ok(Emulator {
+        memory,
+        registers: Registers::new(),
+    })
+}
+
+/// Loads a program from disk into the memory section starting from
+/// address `_PROGRAM_SECTION_START_BYTES`
+/// and returns an iterator over the loaded instructions.
+///
+/// # Parameters
+/// - `path` defines the location of the LC-3 object file to execute
+///
+/// #  Errors
+/// - See [`Lc3EmulatorError`]
+/// - `Lc3EmulatorError::IoError` reading program object file
+/// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
+/// - Program not loaded at byte offset `0x3000`
+/// - Program too long
+pub fn from_program(path: &str) -> Result<Emulator, Lc3EmulatorError> {
+    let (file, file_size) =
+        get_file_with_size(path).map_err(|e| map_err_program_not_loadable(path, e.to_string()))?;
+    if file_size % 2 == 1 {
+        return Err(Lc3EmulatorError::ProgramNotEvenSize(file_size));
+    }
+    let u16_file_size = usize::try_from(file_size / 2)
+        .map_err(|_| Lc3EmulatorError::ProgramDoesNotFitIntoMemory(file_size))?;
+    let mut file_data: Vec<u16> = Vec::with_capacity(u16_file_size);
+    let mut reader = BufReader::new(file);
+    let mut buf = [0u8; 2];
+    let mut read_total = 0;
+    while read_total < file_size {
+        reader
+            .read_exact(&mut buf)
+            .map_err(|e| map_err_program_not_loadable(path, e.to_string()))?;
+        file_data.push(switch_endian_bytes(buf[0], buf[1]));
+        read_total += 2;
+    }
+    from_program_byes(file_data.as_slice())
+}
+
+fn map_err_program_not_loadable(path: &str, message: String) -> Lc3EmulatorError {
+    Lc3EmulatorError::ProgramNotLoadable {
+        file: path.to_owned(),
+        message,
     }
 }
+fn get_file_with_size(path: &str) -> Result<(File, u64), std::io::Error> {
+    let file = File::open(path)?;
+    let file_size = file.metadata()?.len();
+    Ok((file, file_size))
+}
+
 impl Emulator {
-    /// Constructor method
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            memory: Memory::new(),
-            registers: Registers::new(),
-            state: EmulatorState::Start,
-        }
-    }
-
-    // TODO replace by moving emulator to a state machine
-    fn enforce_state(&self, state: &EmulatorState) -> Result<(), Lc3EmulatorError> {
-        if *state == self.state {
-            Ok(())
-        } else {
-            Err(Lc3EmulatorError::WrongState)
-        }
-    }
-
-    fn load_program_from_memory(&mut self, program: &[u16]) -> Result<(), Lc3EmulatorError> {
-        self.enforce_state(&EmulatorState::Start)?;
-        let Some((header, rest)) = program.split_at_checked(1) else {
-            return Err(ProgramMissingOrigHeader);
-        };
-        if header[0] != ORIG_HEADER {
-            let result = Err(ProgramLoadedAtWrongAddress {
-                actual_address: header[0],
-                expected_address: PROGRAM_SECTION_START,
-            });
-            return result;
-        }
-        let res = self.memory.load_program(rest);
-        self.state = EmulatorState::Loaded;
-        res
-    }
-
-    fn map_err_program_not_loadable(path: &str, message: String) -> Lc3EmulatorError {
-        Lc3EmulatorError::ProgramNotLoadable {
-            file: path.to_owned(),
-            message,
-        }
-    }
-    fn get_file_with_size(path: &str) -> Result<(File, u64), std::io::Error> {
-        let file = File::open(path)?;
-        let file_size = file.metadata()?.len();
-        Ok((file, file_size))
-    }
-
-    /// Loads a program from disk into the memory section starting from
-    /// address `_PROGRAM_SECTION_START_BYTES`
-    /// and returns an iterator over the loaded instructions.
-    ///
-    /// # Parameters
-    /// - `path` defines the location of the LC-3 object file to execute
-    ///
-    /// #  Errors
-    /// - See [`Lc3EmulatorError`]
-    /// - `Lc3EmulatorError::IoError` reading program object file
-    /// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
-    /// - Program not loaded at byte offset `0x3000`
-    /// - Program too long
-    pub fn load_program(&mut self, path: &str) -> Result<(), Lc3EmulatorError> {
-        self.enforce_state(&EmulatorState::Start)?;
-        let (file, file_size) = Self::get_file_with_size(path)
-            .map_err(|e| Self::map_err_program_not_loadable(path, e.to_string()))?;
-        if file_size % 2 == 1 {
-            return Err(Lc3EmulatorError::ProgramNotEvenSize(file_size));
-        }
-        let u16_file_size = usize::try_from(file_size / 2)
-            .map_err(|_| Lc3EmulatorError::ProgramDoesNotFitIntoMemory(file_size))?;
-        let mut file_data: Vec<u16> = Vec::with_capacity(u16_file_size);
-        let mut reader = BufReader::new(file);
-        let mut buf = [0u8; 2];
-        let mut read_total = 0;
-        while read_total < file_size {
-            reader
-                .read_exact(&mut buf)
-                .map_err(|e| Self::map_err_program_not_loadable(path, e.to_string()))?;
-            file_data.push(switch_endian_bytes(buf[0], buf[1]));
-            read_total += 2;
-        }
-        self.load_program_from_memory(file_data.as_slice())
-    }
-
     /// Return instructions parsed from loaded program.
-    /// # Errors
-    /// - Program not loaded yet
-    pub fn instructions(
-        &self,
-    ) -> Result<impl ExactSizeIterator<Item = Instruction> + Debug, Lc3EmulatorError> {
-        self.enforce_state(&EmulatorState::Loaded)?;
-        Ok(self
-            .memory
-            .program_slice()?
+    #[must_use]
+    pub fn instructions(&self) -> impl ExactSizeIterator<Item = Instruction> + Debug {
+        self.memory
+            .program_slice()
             .iter()
             .map(|bits| Instruction::from(*bits))
-            .collect::<Vec<Instruction>>()
-            .into_iter())
     }
 
     /// Executes the loaded program.
@@ -163,8 +127,6 @@ impl Emulator {
     }
 
     fn execute_with_writer(&mut self, writer: &mut impl Write) -> Result<(), Lc3EmulatorError> {
-        self.enforce_state(&EmulatorState::Loaded)?;
-        self.state = EmulatorState::Executed;
         while self.registers.pc() < from_binary(self.memory.program_end()) {
             let data = self.memory[self.registers.pc().as_binary()];
             let i = Instruction::from(data);
@@ -281,7 +243,8 @@ fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
 
 #[cfg(test)]
 mod tests {
-    use crate::emulator::{Emulator, ORIG_HEADER, Operation};
+    use crate::emulator;
+    use crate::emulator::{ORIG_HEADER, Operation};
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
     use crate::hardware::registers::from_binary;
     use googletest::prelude::*;
@@ -313,9 +276,8 @@ mod tests {
 
     #[gtest]
     pub fn test_load_program_missing_header() {
-        let mut emu = Emulator::new();
         assert_that!(
-            emu.load_program_from_memory(Vec::with_capacity(0).as_mut_slice())
+            emulator::from_program_byes(Vec::with_capacity(0).as_mut_slice())
                 .unwrap_err()
                 .to_string(),
             eq("Program is missing valid .ORIG header")
@@ -323,9 +285,8 @@ mod tests {
     }
     #[gtest]
     pub fn test_load_program_wrong_header() {
-        let mut emu = Emulator::new();
         assert_that!(
-            emu.load_program_from_memory(vec![0x3001].as_mut_slice())
+            emulator::from_program_byes(vec![0x3001].as_mut_slice())
                 .unwrap_err()
                 .to_string(),
             eq("Program is not loaded at 0x3000' but 0x3001")
@@ -334,10 +295,9 @@ mod tests {
     #[gtest]
     pub fn test_load_program_disk_hello() {
         let mut sw = StringWriter::new();
-        let mut emu = Emulator::new();
-        emu.load_program("examples/hello_world.o").unwrap();
+        let mut emu = emulator::from_program("examples/hello_world.o").unwrap();
         {
-            let mut ins = emu.instructions().unwrap();
+            let mut ins = emu.instructions();
             assert_that!(ins.len(), eq(15));
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
@@ -347,8 +307,7 @@ mod tests {
     }
     #[gtest]
     pub fn test_program_add_ld_break_times_ten() {
-        let mut emu = Emulator::new();
-        emu.load_program("examples/times_ten.o").unwrap();
+        let mut emu = emulator::from_program("examples/times_ten.o").unwrap();
         emu.execute().unwrap();
         assert_that!(emu.registers.get(2), eq(from_binary(0)));
         assert_that!(emu.registers.get(3), eq(from_binary(30)));
@@ -356,12 +315,10 @@ mod tests {
     }
     #[gtest]
     pub fn test_load_program_max_size() {
-        let mut emu = Emulator::new();
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
         program[0] = ORIG_HEADER;
-        emu.load_program_from_memory(program.as_mut_slice())
-            .unwrap();
-        let ins = emu.instructions().unwrap();
+        let emu = emulator::from_program_byes(program.as_mut_slice()).unwrap();
+        let ins = emu.instructions();
         assert_that!(
             ins.len(),
             eq(usize::from(PROGRAM_SECTION_MAX_INSTRUCTION_COUNT))
@@ -369,11 +326,10 @@ mod tests {
     }
     #[gtest]
     pub fn test_load_program_too_large() {
-        let mut emu = Emulator::new();
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER + 1];
         program[0] = ORIG_HEADER;
         assert_that!(
-            emu.load_program_from_memory(program.as_mut_slice())
+            emulator::from_program_byes(program.as_mut_slice())
                 .unwrap_err()
                 .to_string(),
             eq("Program too long, got 52737 u16 instructions while limit is 52736")
