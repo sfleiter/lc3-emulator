@@ -1,3 +1,6 @@
+# This currently not used and replaced by the Dynamic TOML Badge, see
+# https://shields.io/badges/dynamic-toml-badge
+
 name: Generate README.md
 permissions:
   contents: write

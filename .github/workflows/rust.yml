@@ -1,4 +1,4 @@
-name: Rust
+name: Build (main)
 permissions:
   contents: read
 on:
@@ -35,17 +35,17 @@ jobs:
       - run: |
           cargo binstall --no-confirm cargo-msrv --locked
           cargo-msrv verify
-      - id: msrv-version
-        run: |
-          version=$(cargo-msrv show --output-format minimal)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-  call-generate-readme:
-    permissions:
-      contents: write
-    needs: msrv
-    uses: ./.github/workflows/generate-readme.yml
-    with:
-      msrv: ${{ needs.msrv.outputs.msrv-version }}
+      # - id: msrv-version
+      #   run: |
+      #     version=$(cargo-msrv show --output-format minimal)
+      #     echo "version=$version" >> "$GITHUB_OUTPUT"
+  # call-generate-readme:
+  #   permissions:
+  #     contents: write
+  #   needs: msrv
+  #   uses: ./.github/workflows/generate-readme.yml
+  #   with:
+  #     msrv: ${{ needs.msrv.outputs.msrv-version }}
   formatting:
     name: cargo fmt
     runs-on: ubuntu-latest

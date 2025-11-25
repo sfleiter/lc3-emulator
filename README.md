@@ -13,16 +13,14 @@ The main goals are:
 
 ## Status
 
+[![Minimum Supported Rust Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsfleiter%2Flc3-emulator%2Fmain%2FCargo.toml&query=%24%5B%22package%22%5D.rust-version&label=MSRV)](https://doc.rust-lang.org/cargo/reference/rust-version.html#rust-version)
+[![Build Status](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust.yml/badge.svg)](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust.yml)
+[![Audit Dependencies](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-audit-dependencies.yml/badge.svg)](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-audit-dependencies.yml)
+[![GitHub License](https://img.shields.io/github/license/sfleiter/lc3-emulator)](https://github.com/sfleiter/lc3-emulator?tab=MIT-1-ov-file#readme)
+
 Implementation of opcodes and trap routines is still incomplete, see `todo!()` markers in [
 `opcodes.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/opcodes.rs)
 and [`emulator/mod.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/mod.rs)
-
-## Usage
-
-Compile and run as usual.
-
-Minimum Supported Rust Version (MSRV): is `1.87.0`,
-see [Rust Reference](https://doc.rust-lang.org/cargo/reference/rust-version.html#rust-version).
 
 ## Contributing
 
@@ -48,7 +46,6 @@ to improve this project I am happy for every filed issue on that, though.
     - Verify the code with clippy according to config
       in [Cargo.toml](https://github.com/sfleiter/lc3-emulator/blob/main/Cargo.toml)
     - Check formatting agrees with `rustfmt` (default) configuration
-    - Generate README.md from template
   - Daily
     - Audit dependencies for security issues
   - Weekly

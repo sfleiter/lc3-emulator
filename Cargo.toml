@@ -3,8 +3,8 @@ name = "lc3-emulator"
 version = "0.1.0"
 edition = "2024"
 # https://releases.rs/#rust-versions
-# at least half a year, 1.87 from 15 May, 2025
-rust-version = "1.87"
+# at least half a year, 1.87.0 from 15 May, 2025
+rust-version = "1.87.0"
 
 [lints.clippy]
 pedantic = "warn"
