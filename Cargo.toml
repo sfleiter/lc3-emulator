@@ -12,7 +12,7 @@ nursery = "warn"
 # cargo = "warn"
 
 [dependencies]
-thiserror = "2.0"
+displaydoc = "0.2.5"
 
 [dev-dependencies]
 googletest = "0.14"

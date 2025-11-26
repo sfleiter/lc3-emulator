@@ -16,22 +16,22 @@ const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 #[derive(Debug)]
 #[derive(PartialEq, Eq)]
 enum Operation {
-    Add  = 0b0001,
-    And  = 0b0101,
-    Not  = 0b1001,
     Br   = 0b0000,
-    JmpOrRet  = 0b1100,
-    Jsr  = 0b0100,
+    Add  = 0b0001,
     Ld   = 0b0010,
-    Ldi  = 0b1010,
-    Ldr  = 0b0110,
-    Lea  = 0b1110,
     St   = 0b0011,
-    Sti  = 0b1011,
+    Jsr  = 0b0100,
+    And  = 0b0101,
+    Ldr  = 0b0110,
     Str  = 0b0111,
-    Trap = 0b1111,
     Rti  = 0b1000,
+    Not  = 0b1001,
+    Ldi  = 0b1010,
+    Sti  = 0b1011,
+    JmpOrRet  = 0b1100,
     _Reserved = 0b1101,
+    Lea  = 0b1110,
+    Trap = 0b1111,
 }
 
 /// The public facing emulator used to run LC-3 programs.
@@ -70,10 +70,6 @@ fn from_program_byes(data: &[u16]) -> Result<Emulator, Lc3EmulatorError> {
 ///
 /// #  Errors
 /// - See [`Lc3EmulatorError`]
-/// - `Lc3EmulatorError::IoError` reading program object file
-/// - Program is missing valid .ORIG header (because it is shorter than one `u16` instruction
-/// - Program not loaded at byte offset `0x3000`
-/// - Program too long
 pub fn from_program(path: &str) -> Result<Emulator, Lc3EmulatorError> {
     let (file, file_size) =
         get_file_with_size(path).map_err(|e| map_err_program_not_loadable(path, e.to_string()))?;
@@ -120,8 +116,7 @@ impl Emulator {
 
     /// Executes the loaded program.
     /// # Errors
-    /// - Program not loaded yet
-    /// - Unknown instruction
+    /// - See [`Lc3EmulatorError`]
     pub fn execute(&mut self) -> Result<(), Lc3EmulatorError> {
         let mut writer = stdout().lock();
         self.execute_with_writer(&mut writer)
@@ -170,15 +165,21 @@ impl Emulator {
             o if o == Operation::Str as u8 => opcodes::str(instruction, &mut self.registers),
             o if o == Operation::Trap as u8 => return self.trap(instruction, writer),
             o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
-            o => return ControlFlow::Break(Err(Lc3EmulatorError::InvalidInstruction(o))),
+            o if o == Operation::_Reserved as u8 => {
+                return ControlFlow::Break(Err(Lc3EmulatorError::ReservedInstructionFound(o)));
+            }
+            _ => unreachable!("All variants of 4 bit opcodes checked"),
         }
         ControlFlow::Continue(())
     }
-    /// Handles Trap Routines
+    /// Handles Trap Routines.
     ///
-    /// # Panics
-    /// - No access to memory, which can only happen when program is not loaded in which case
-    ///   we should never run this method
+    /// # Result
+    /// - [`ControlFlow::Continue`] when the program should continue as normal
+    /// - [`ControlFlow::Break`] with a [`Result`] when the program should end
+    ///
+    /// # Errors
+    /// - see [`Lc3EmulatorError`]
     pub fn trap(
         &mut self,
         i: Instruction,
@@ -290,7 +291,7 @@ mod tests {
             emulator::from_program_byes(vec![0x3001].as_mut_slice())
                 .unwrap_err()
                 .to_string(),
-            eq("Program is not loaded at 0x3000' but 0x3001")
+            eq("Program is not loaded at 0x3000 but 0x3001")
         );
     }
     #[gtest]

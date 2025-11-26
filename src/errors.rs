@@ -1,29 +1,36 @@
+//! Errors that can occur using this crate.
+use displaydoc::Display;
 use std::fmt::{Debug, Display, Formatter};
-use thiserror::Error;
 
+/// Issues are split in 2 groups
+/// - Errors starting with `Program`: invalid programs or errors during attempts to load them.
+/// - other: Errors during execution
+///
+/// `Display` and `Debug` provide all necessary details.
 #[rustfmt::skip]
-#[derive(Error, PartialEq, Eq)]
+#[expect(clippy::doc_markdown, reason= "using backticks as suggested would break displaydoc")]
+#[derive(Display, PartialEq, Eq)]
 pub enum Lc3EmulatorError {
-    #[error("Program is missing valid .ORIG header")]
+    /// Program is missing valid .ORIG header
     ProgramMissingOrigHeader,
-    #[error("Program is missing valid .ORIG header")]
+    /// Loading an empty program is not allowed
     ProgramEmpty,
-    #[error("Loading an empty programm is not allowed")]
+    /// Programs mut be an even amount of bytes (multiple of 16-bit instructions), but is {0} bytes long.
     ProgramNotEvenSize(u64),
-    #[error("Program does not fit into memory, file size: {0} is greater than usize")]
+    /// Program does not fit into memory, file size: {0} is greater than usize
     ProgramDoesNotFitIntoMemory(u64),
-    #[error("Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}")]
+    /// Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}
     ProgramTooLong { actual_instructions: usize, maximum_instructions: u16 },
-    #[error("Program is not loaded at 0x{expected_address:04X?}' but 0x{actual_address:04X?}")]
+    /// Program is not loaded at {expected_address:#06X?} but {actual_address:#06X?}
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
-    #[error("Cannot read program from file '{file}': {message}")]
+    /// Cannot read program from file '{file}': {message}
     ProgramNotLoadable {
         file: String,
         message: String
     },
-    #[error("Invalid instruction opcode: 0b{0:04b}")]
-    InvalidInstruction(u8),
-    #[error("Could not write to output: {0}")]
+    /// The reserved opcode {0:#06b} was found which is not specified. Most probably an invalid program.
+    ReservedInstructionFound(u8),
+    /// Error during writing program output: {0}
     IOStdoutError(String),
 }
 
