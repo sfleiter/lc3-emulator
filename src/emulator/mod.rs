@@ -1,7 +1,7 @@
 mod instruction;
 mod opcodes;
 
-use crate::errors::Lc3EmulatorError;
+use crate::errors::{ExecutionError, LoadProgramError};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
 use crate::terminal;
@@ -42,18 +42,18 @@ pub struct Emulator {
     registers: Registers,
 }
 
-fn from_program_byes(data: &[u16]) -> Result<Emulator, Lc3EmulatorError> {
+fn from_program_byes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
     let [header, program @ ..] = data else {
-        return Err(Lc3EmulatorError::ProgramMissingOrigHeader);
+        return Err(LoadProgramError::ProgramMissingOrigHeader);
     };
     if *header != ORIG_HEADER {
-        return Err(Lc3EmulatorError::ProgramLoadedAtWrongAddress {
+        return Err(LoadProgramError::ProgramLoadedAtWrongAddress {
             actual_address: *header,
             expected_address: PROGRAM_SECTION_START,
         });
     }
     if program.is_empty() {
-        return Err(Lc3EmulatorError::ProgramEmpty);
+        return Err(LoadProgramError::ProgramEmpty);
     }
     let mut memory = Memory::new();
     memory.load_program(program)?;
@@ -71,15 +71,15 @@ fn from_program_byes(data: &[u16]) -> Result<Emulator, Lc3EmulatorError> {
 /// - `path` defines the location of the LC-3 object file to execute
 ///
 /// #  Errors
-/// - See [`Lc3EmulatorError`]
-pub fn from_program(path: &str) -> Result<Emulator, Lc3EmulatorError> {
+/// - See [`LoadProgramError`]
+pub fn from_program(path: &str) -> Result<Emulator, LoadProgramError> {
     let (file, file_size) =
         get_file_with_size(path).map_err(|e| map_err_program_not_loadable(path, e.to_string()))?;
     if file_size % 2 == 1 {
-        return Err(Lc3EmulatorError::ProgramNotEvenSize(file_size));
+        return Err(LoadProgramError::ProgramNotEvenSize(file_size));
     }
     let u16_file_size = usize::try_from(file_size / 2)
-        .map_err(|_| Lc3EmulatorError::ProgramDoesNotFitIntoMemory(file_size))?;
+        .map_err(|_| LoadProgramError::ProgramDoesNotFitIntoMemory(file_size))?;
     let mut file_data: Vec<u16> = Vec::with_capacity(u16_file_size);
     let mut reader = BufReader::new(file);
     let mut buf = [0u8; 2];
@@ -94,8 +94,8 @@ pub fn from_program(path: &str) -> Result<Emulator, Lc3EmulatorError> {
     from_program_byes(file_data.as_slice())
 }
 
-fn map_err_program_not_loadable(path: &str, message: String) -> Lc3EmulatorError {
-    Lc3EmulatorError::ProgramNotLoadable {
+fn map_err_program_not_loadable(path: &str, message: String) -> LoadProgramError {
+    LoadProgramError::ProgramNotLoadable {
         file: path.to_owned(),
         message,
     }
@@ -118,13 +118,13 @@ impl Emulator {
 
     /// Executes the loaded program.
     /// # Errors
-    /// - See [`Lc3EmulatorError`]
-    pub fn execute(&mut self) -> Result<(), Lc3EmulatorError> {
+    /// - See [`ExecutionError`]
+    pub fn execute(&mut self) -> Result<(), ExecutionError> {
         let mut writer = stdout().lock();
         self.execute_with_writer(&mut writer)
     }
 
-    fn execute_with_writer(&mut self, writer: &mut impl Write) -> Result<(), Lc3EmulatorError> {
+    fn execute_with_writer(&mut self, writer: &mut impl Write) -> Result<(), ExecutionError> {
         while self.registers.pc() < from_binary(self.memory.program_end()) {
             let data = self.memory[self.registers.pc().as_binary()];
             let i = Instruction::from(data);
@@ -146,7 +146,7 @@ impl Emulator {
         &mut self,
         instruction: Instruction,
         writer: &mut impl Write,
-    ) -> ControlFlow<Result<(), Lc3EmulatorError>, ()> {
+    ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         match instruction.op_code() {
             o if o == Operation::Add as u8 => opcodes::add(instruction, &mut self.registers),
             o if o == Operation::And as u8 => opcodes::and(instruction, &mut self.registers),
@@ -168,15 +168,15 @@ impl Emulator {
             o if o == Operation::Trap as u8 => return self.trap(instruction, writer),
             o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
             o if o == Operation::_Reserved as u8 => {
-                return ControlFlow::Break(Err(Lc3EmulatorError::ReservedInstructionFound(o)));
+                return ControlFlow::Break(Err(ExecutionError::ReservedInstructionFound(o)));
             }
             _ => unreachable!("All variants of 4 bit opcodes checked"),
         }
         ControlFlow::Continue(())
     }
 
-    fn wrap_io_error_in_cf(error: &impl ToString) -> ControlFlow<Result<(), Lc3EmulatorError>, ()> {
-        ControlFlow::Break(Err(Lc3EmulatorError::IOStdoutError(error.to_string())))
+    fn wrap_io_error_in_cf(error: &impl ToString) -> ControlFlow<Result<(), ExecutionError>, ()> {
+        ControlFlow::Break(Err(ExecutionError::IOStdoutError(error.to_string())))
     }
 
     /// Handles Trap Routines.
@@ -186,12 +186,12 @@ impl Emulator {
     /// - [`ControlFlow::Break`] with a [`Result`] when the program should end
     ///
     /// # Errors
-    /// - see [`Lc3EmulatorError`]
+    /// - see [`ExecutionError`]
     pub fn trap(
         &mut self,
         i: Instruction,
         mut writer: impl Write,
-    ) -> ControlFlow<Result<(), Lc3EmulatorError>, ()> {
+    ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         // TODO test all implemented trap routines
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
@@ -258,7 +258,7 @@ impl Emulator {
                 println!("\nProgram halted");
                 ControlFlow::Break(Ok(()))
             }
-            tr => ControlFlow::Break(Err(Lc3EmulatorError::UnknownTrapRoutine(tr))),
+            tr => ControlFlow::Break(Err(ExecutionError::UnknownTrapRoutine(tr))),
         }
     }
 }

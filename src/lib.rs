@@ -6,12 +6,22 @@
 //!  # Example
 //! ```
 //! use lc3_emulator::emulator;
-//! let mut emu = emulator::from_program("examples/hello_world.o").unwrap();
-//! let res =  emu.execute();
-//! assert!(res.is_ok());
+//! use std::error::Error;
+//!
+//! fn main() -> Result<(), Box<dyn Error>> {
+//!     let mut emu =
+//!     // from_program returns Result<(), LoadProgramError>
+//!     emulator::from_program("examples/hello_world.o")
+//!         .map_err(Box::<dyn Error>::from)?;
+//!
+//!     // execute returns Result<(), ExecutionError>
+//!     emu.execute()
+//!         .map_err(Box::<dyn Error>::from)
+//! }
 //! ```
 //! # Errors
-//! - see [`Lc3EmulatorError`](errors::Lc3EmulatorError)
+//! - see [`LoadProgramError`](errors::LoadProgramError)
+//! - see [`ExecutionError`](errors::ExecutionError)
 pub mod emulator;
 pub mod errors;
 pub mod hardware;

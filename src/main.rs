@@ -1,10 +1,8 @@
 use lc3_emulator::emulator;
-use lc3_emulator::errors::Lc3EmulatorError;
+use std::error::Error;
 
-fn main() -> Result<(), Lc3EmulatorError> {
-    let mut emu = emulator::from_program("examples/hello_world.o")?;
-    for i in emu.instructions() {
-        println!("{i:?}");
-    }
-    emu.execute()
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut emu =
+        emulator::from_program("examples/hello_world.o").map_err(Box::<dyn Error>::from)?;
+    emu.execute().map_err(Box::<dyn Error>::from)
 }

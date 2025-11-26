@@ -1,4 +1,4 @@
-use crate::errors::Lc3EmulatorError;
+use crate::errors::LoadProgramError;
 use std::fmt::{Debug, Formatter};
 use std::ops::Index;
 
@@ -48,7 +48,7 @@ impl Memory {
         }
     }
     #[cfg(test)]
-    pub(crate) fn with_program(program: &Vec<u16>) -> Result<Self, Lc3EmulatorError> {
+    pub(crate) fn with_program(program: &Vec<u16>) -> Result<Self, LoadProgramError> {
         let mut res = Self::new();
         res.load_program(program.as_ref())?;
         Ok(res)
@@ -59,9 +59,9 @@ impl Memory {
     ///
     /// # Errors
     /// - Program too long
-    pub fn load_program(&mut self, data: &[u16]) -> Result<(), Lc3EmulatorError> {
+    pub fn load_program(&mut self, data: &[u16]) -> Result<(), LoadProgramError> {
         if data.len() > usize::from(PROGRAM_SECTION_MAX_INSTRUCTION_COUNT) {
-            return Err(Lc3EmulatorError::ProgramTooLong {
+            return Err(LoadProgramError::ProgramTooLong {
                 actual_instructions: data.len(),
                 maximum_instructions: PROGRAM_SECTION_MAX_INSTRUCTION_COUNT,
             });
