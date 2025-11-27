@@ -239,15 +239,26 @@ impl Emulator {
                     Err(e) => Self::wrap_io_error_in_cf(&e),
                 }
             }
+            0x23 => {
+                // IN: Print a prompt on the screen and read a single character from the keyboard. The
+                // character is echoed.
+                // Otherwise, like 0x20 GETC.
+                todo!()
+            }
+            0x24 => {
+                // PUTSP: Packed version of PUTS
+                // The ASCII code contained in bits [7:0] of a memory location
+                // is written to the console first. The second character of the last memory location
+                // can be 0x00.
+                // Writing terminates with a 0x000 char
+                todo!()
+            }
             0x25 => {
                 // HALT
                 println!("\nProgram halted");
                 ControlFlow::Break(Ok(()))
             }
-            _ => {
-                eprintln!("Trap routine {trap_routine:#04X} not implemented yet");
-                todo!()
-            }
+            tr => ControlFlow::Break(Err(Lc3EmulatorError::UnknownTrapRoutine(tr))),
         }
     }
 }

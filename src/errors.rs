@@ -21,7 +21,7 @@ pub enum Lc3EmulatorError {
     ProgramDoesNotFitIntoMemory(u64),
     /// Program too long, got {actual_instructions:?} u16 instructions while limit is {maximum_instructions:?}
     ProgramTooLong { actual_instructions: usize, maximum_instructions: u16 },
-    /// Program is not loaded at {expected_address:#06X?} but {actual_address:#06X?}
+    /// Program is not loaded at {expected_address:#06X} but {actual_address:#06X}
     ProgramLoadedAtWrongAddress {actual_address: u16, expected_address: u16},
     /// Cannot read program from file '{file}': {message}
     ProgramNotLoadable {
@@ -32,6 +32,8 @@ pub enum Lc3EmulatorError {
     ReservedInstructionFound(u8),
     /// Error during writing program output: {0}
     IOStdoutError(String),
+    /// Unknown trap routine found: {0:#06X}
+    UnknownTrapRoutine(u16),
 }
 
 impl Debug for Lc3EmulatorError {
