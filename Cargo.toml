@@ -13,6 +13,8 @@ nursery = "warn"
 
 [dependencies]
 displaydoc = "0.2.5"
+termios = "0.3"
+
 
 [dev-dependencies]
 googletest = "0.14"

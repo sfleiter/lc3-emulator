@@ -16,3 +16,4 @@ pub mod emulator;
 pub mod errors;
 pub mod hardware;
 pub(crate) mod numbers;
+mod terminal;

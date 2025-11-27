@@ -4,10 +4,12 @@ mod opcodes;
 use crate::errors::Lc3EmulatorError;
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
+use crate::terminal;
 use instruction::Instruction;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
-use std::io::{BufReader, Read, Write, stdout};
+use std::io;
+use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::ops::ControlFlow;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
@@ -98,7 +100,7 @@ fn map_err_program_not_loadable(path: &str, message: String) -> Lc3EmulatorError
         message,
     }
 }
-fn get_file_with_size(path: &str) -> Result<(File, u64), std::io::Error> {
+fn get_file_with_size(path: &str) -> Result<(File, u64), io::Error> {
     let file = File::open(path)?;
     let file_size = file.metadata()?.len();
     Ok((file, file_size))
@@ -172,6 +174,11 @@ impl Emulator {
         }
         ControlFlow::Continue(())
     }
+
+    fn wrap_io_error_in_cf(error: &impl ToString) -> ControlFlow<Result<(), Lc3EmulatorError>, ()> {
+        ControlFlow::Break(Err(Lc3EmulatorError::IOStdoutError(error.to_string())))
+    }
+
     /// Handles Trap Routines.
     ///
     /// # Result
@@ -188,6 +195,31 @@ impl Emulator {
         // TODO test all implemented trap routines
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
+            0x20 => {
+                // GETC: Read a single character from the keyboard. The character is not echoed onto the
+                // console. Its ASCII code is copied into R0. The high eight bits of R0 are cleared.
+
+                // Closure is workaround for missing try blocks:
+                // https://users.rust-lang.org/t/idiomatic-way-to-avoid-match/86670/3
+                match (|| {
+                    let _lock = terminal::set_terminal_raw()?;
+                    let mut b = [0; 1];
+                    stdin().read_exact(&mut b)?;
+                    self.registers.set(0, from_binary(u16::from(b[0])));
+                    io::Result::Ok(())
+                })() {
+                    Ok(()) => ControlFlow::Continue(()),
+                    Err(e) => Self::wrap_io_error_in_cf(&e),
+                }
+            }
+            0x21 => {
+                //OUT:  Write a character in R0[7:0] to the console display.
+                let c: char = (self.registers.get(0).as_binary() & 0xFF) as u8 as char;
+                match write!(writer, "{c}").and_then(|()| writer.flush()) {
+                    Ok(()) => ControlFlow::Continue(()),
+                    Err(e) => Self::wrap_io_error_in_cf(&e),
+                }
+            }
             0x22 => {
                 // PUTS: print null-delimited char* from register 0's address
                 let address = self.registers.get(0).as_binary();
@@ -204,9 +236,7 @@ impl Emulator {
                 }
                 match writeln!(writer, "{s}").and_then(|()| writer.flush()) {
                     Ok(()) => ControlFlow::Continue(()),
-                    Err(e) => {
-                        ControlFlow::Break(Err(Lc3EmulatorError::IOStdoutError(e.to_string())))
-                    }
+                    Err(e) => Self::wrap_io_error_in_cf(&e),
                 }
             }
             0x25 => {
