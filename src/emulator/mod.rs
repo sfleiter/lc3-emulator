@@ -1,15 +1,15 @@
 mod instruction;
 mod opcodes;
+mod trap_routines;
 
 use crate::errors::{ExecutionError, LoadProgramError};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
-use crate::terminal;
 use instruction::Instruction;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Read, Write, stdin, stdout};
+use std::io::{BufReader, Read, Write, stdout};
 use std::ops::ControlFlow;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
@@ -175,10 +175,6 @@ impl Emulator {
         ControlFlow::Continue(())
     }
 
-    fn wrap_io_error_in_cf(error: &impl ToString) -> ControlFlow<Result<(), ExecutionError>, ()> {
-        ControlFlow::Break(Err(ExecutionError::IOStdoutError(error.to_string())))
-    }
-
     /// Handles Trap Routines.
     ///
     /// # Result
@@ -192,74 +188,14 @@ impl Emulator {
         i: Instruction,
         mut writer: impl Write,
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
-        // TODO test all implemented trap routines
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
-            0x20 => {
-                // GETC: Read a single character from the keyboard. The character is not echoed onto the
-                // console. Its ASCII code is copied into R0. The high eight bits of R0 are cleared.
-
-                // Closure is workaround for missing try blocks:
-                // https://users.rust-lang.org/t/idiomatic-way-to-avoid-match/86670/3
-                match (|| {
-                    let _lock = terminal::set_terminal_raw()?;
-                    let mut b = [0; 1];
-                    stdin().read_exact(&mut b)?;
-                    self.registers.set(0, from_binary(u16::from(b[0])));
-                    io::Result::Ok(())
-                })() {
-                    Ok(()) => ControlFlow::Continue(()),
-                    Err(e) => Self::wrap_io_error_in_cf(&e),
-                }
-            }
-            0x21 => {
-                //OUT:  Write a character in R0[7:0] to the console display.
-                let c: char = (self.registers.get(0).as_binary() & 0xFF) as u8 as char;
-                match write!(writer, "{c}").and_then(|()| writer.flush()) {
-                    Ok(()) => ControlFlow::Continue(()),
-                    Err(e) => Self::wrap_io_error_in_cf(&e),
-                }
-            }
-            0x22 => {
-                // PUTS: print null-delimited char* from register 0's address
-                let address = self.registers.get(0).as_binary();
-                let mut end = address;
-                let mut s = String::with_capacity(120);
-                while self.memory[end] != 0 {
-                    #[expect(
-                        clippy::cast_possible_truncation,
-                        reason = "Truncation is what is expected here"
-                    )]
-                    let c = (self.memory[end] as u8) as char;
-                    s.push(c);
-                    end += 1;
-                }
-                match writeln!(writer, "{s}").and_then(|()| writer.flush()) {
-                    Ok(()) => ControlFlow::Continue(()),
-                    Err(e) => Self::wrap_io_error_in_cf(&e),
-                }
-            }
-            0x23 => {
-                // IN: Print a prompt on the screen and read a single character from the keyboard. The
-                // character is echoed.
-                // Otherwise, like 0x20 GETC.
-                todo!()
-            }
-            0x24 => {
-                // PUTSP: Packed version of PUTS
-                // The ASCII code contained in bits [7:0] of a memory location
-                // is written to the console first. The second character of the last memory location
-                // can be 0x00.
-                // Writing terminates with a 0x000 char
-                todo!()
-            }
-            0x25 => {
-                // HALT
-                match writeln!(writer, "\nProgram halted").and_then(|()| writer.flush()) {
-                    Ok(()) => ControlFlow::Break(Ok(())),
-                    Err(e) => Self::wrap_io_error_in_cf(&e),
-                }
-            }
+            0x20 => trap_routines::get_c(&mut self.registers),
+            0x21 => trap_routines::out(&self.registers, &mut writer),
+            0x22 => trap_routines::put_s(&self.registers, &self.memory, &mut writer),
+            0x23 => trap_routines::in_trap(&mut self.registers, &mut writer),
+            0x24 => trap_routines::put_sp(&self.registers, &self.memory, &mut writer),
+            0x25 => trap_routines::halt(&mut writer),
             tr => ControlFlow::Break(Err(ExecutionError::UnknownTrapRoutine(tr))),
         }
     }
