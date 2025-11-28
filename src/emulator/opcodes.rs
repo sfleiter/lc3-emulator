@@ -94,7 +94,7 @@ pub fn br(i: Instruction, r: &mut Registers) {
             ConditionFlag::Neg => i.get_bit(11),
         };
     if do_break {
-        r.set_pc((r.pc().as_decimal() + i.pc_offset(9)).cast_unsigned());
+        r.set_pc(address_by_offset(r.pc(), i.pc_offset(9)));
     }
 }
 pub fn jmp_or_ret(_i: Instruction, _r: &Registers) {
@@ -110,7 +110,7 @@ pub fn jsr(_i: Instruction, _r: &Registers) {
 ///  -------------------------
 /// ```
 pub fn ld(i: Instruction, r: &mut Registers, memory: &Memory) {
-    let value = memory[address_by_pc_offset(r, i.pc_offset(9))];
+    let value = memory[address_by_offset(r.pc(), i.pc_offset(9))];
     r.set(i.dr_number(), from_binary(value));
     r.update_conditional_register(i.dr_number());
 }
@@ -123,8 +123,11 @@ pub fn ld(i: Instruction, r: &mut Registers, memory: &Memory) {
 /// | 1010 |  DR  | PCoffset9 |
 ///  -------------------------
 /// ```
-pub fn ldi(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn ldi(i: Instruction, r: &mut Registers, memory: &Memory) {
+    let address_address = address_by_offset(r.pc(), i.pc_offset(9));
+    let value_address = memory[address_address];
+    r.set(i.dr_number(), from_binary(memory[value_address]));
+    r.update_conditional_register(i.dr_number());
 }
 /// LDR: Load address from base register and adds sign extended offset to load the memory content
 /// from there into DR.
@@ -133,12 +136,15 @@ pub fn ldi(_i: Instruction, _r: &Registers) {
 /// | 0110 |  DR | BaseR | offset6 |
 ///  ------------------------------
 /// ```
-pub fn ldr(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn ldr(i: Instruction, r: &mut Registers, memory: &Memory) {
+    let base_register = i.get_bit_range_u8(6, 8, "Error in ldr");
+    let value_address = address_by_offset(r.get(base_register), i.pc_offset(6));
+    r.set(i.dr_number(), from_binary(memory[value_address]));
+    r.update_conditional_register(i.dr_number());
 }
 
-fn address_by_pc_offset(r: &Registers, offset: i16) -> u16 {
-    let address = r.pc().as_decimal() + offset;
+fn address_by_offset(r: Register, offset: i16) -> u16 {
+    let address = r.as_decimal() + offset;
     address.cast_unsigned()
 }
 
@@ -151,7 +157,7 @@ fn address_by_pc_offset(r: &Registers, offset: i16) -> u16 {
 pub fn lea(i: Instruction, r: &mut Registers) {
     r.set(
         i.dr_number(),
-        Register::from_binary(address_by_pc_offset(r, i.pc_offset(9))),
+        Register::from_binary(address_by_offset(r.pc(), i.pc_offset(9))),
     );
     r.update_conditional_register(i.dr_number());
 }
@@ -309,12 +315,39 @@ mod tests {
         let memory = Memory::with_program(&raw).expect("Error loading program");
         // LD - DR: 4, PC_OFFSET9: -0x44
         ld(0b0010_100_1_1011_1100.into(), &mut regs, &memory);
-        expect_that!(regs.get(4).as_decimal(), eq(815));
+        expect_that!(regs.get(4), eq(from_decimal(815)));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
 
         // LD - DR: 4, PC_OFFSET9: -0x45
         ld(0b0010_100_1_1011_1011.into(), &mut regs, &memory);
-        expect_that!(regs.get(4).as_decimal(), eq(4711));
+        expect_that!(regs.get(4), eq(from_decimal(4711)));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Pos));
+    }
+    #[gtest]
+    pub fn test_opcode_ldr() {
+        let mut regs = Registers::new();
+        let mut raw = vec![0; 6];
+        let mem_val = 0b1111_1111_1111_0110; // -10
+        raw[5] = mem_val;
+        let memory = Memory::with_program(&raw).expect("Error loading program");
+        regs.set(6, from_binary(0x3025));
+        // LDR - DR: 2, - BaseR: 6, OFFSET6: -32 = -0x20
+        ldr(0b0110_010_110_100000.into(), &mut regs, &memory);
+        expect_that!(regs.get(2), eq(from_binary(mem_val)));
+        expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
+    }
+    #[gtest]
+    pub fn test_opcode_ldi() {
+        let mut regs = Registers::new();
+        let mut raw = vec![0; 10];
+        let val_to_load_in_register = 0b1111_1111_1111_0110; // -10
+        raw[3] = val_to_load_in_register;
+        raw[5] = 0x3003; // absolute address of value above
+        let memory = Memory::with_program(&raw).expect("Error loading program");
+        regs.set_pc(0x3065);
+        // LDR - DR: 1, - PC_OFFSET9: -96 = -0x60
+        ldi(0b1010_001_110100000.into(), &mut regs, &memory);
+        expect_that!(regs.get(1), eq(from_binary(val_to_load_in_register)));
+        expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
     }
 }

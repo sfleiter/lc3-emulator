@@ -168,8 +168,12 @@ impl Emulator {
             o if o == Operation::Ld as u8 => {
                 opcodes::ld(instruction, &mut self.registers, &self.memory);
             }
-            o if o == Operation::Ldi as u8 => opcodes::ldi(instruction, &mut self.registers),
-            o if o == Operation::Ldr as u8 => opcodes::ldr(instruction, &mut self.registers),
+            o if o == Operation::Ldi as u8 => {
+                opcodes::ldi(instruction, &mut self.registers, &mut self.memory);
+            }
+            o if o == Operation::Ldr as u8 => {
+                opcodes::ldr(instruction, &mut self.registers, &mut self.memory);
+            }
             o if o == Operation::Lea as u8 => opcodes::lea(instruction, &mut self.registers),
             o if o == Operation::St as u8 => opcodes::st(instruction, &mut self.registers),
             o if o == Operation::Sti as u8 => opcodes::sti(instruction, &mut self.registers),
