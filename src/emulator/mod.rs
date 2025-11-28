@@ -276,7 +276,7 @@ mod tests {
     #[gtest]
     pub fn test_load_program_disk_hello() {
         let mut sw = StringWriter::new();
-        let mut emu = emulator::from_program("examples/hello_world.o").unwrap();
+        let mut emu = emulator::from_program("examples/hello_world_puts.o").unwrap();
         {
             let mut ins = emu.instructions();
             assert_that!(ins.len(), eq(15));

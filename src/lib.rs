@@ -11,7 +11,7 @@
 //! fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut emu =
 //!     // from_program returns Result<(), LoadProgramError>
-//!     emulator::from_program("examples/hello_world.o")
+//!     emulator::from_program("examples/hello_world_puts.o")
 //!         .map_err(Box::<dyn Error>::from)?;
 //!
 //!     // execute returns Result<(), ExecutionError>

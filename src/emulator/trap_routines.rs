@@ -34,22 +34,37 @@ pub fn out(regs: &Registers, write: &mut impl Write) -> ControlFlow<Result<(), E
     }
 }
 
-/// PUTS: print null-delimited char* from register 0's address
-pub fn put_s(
+fn put_one_char_per_u16(input: u16, append_to: &mut String) {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Truncation is what is expected here"
+    )]
+    let c = (input as u8) as char;
+    append_to.push(c);
+}
+fn put_two_chars_per_u16(input: u16, append_to: &mut String) {
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "Truncation is what is expected here"
+    )]
+    let c = (input as u8) as char;
+    append_to.push(c);
+    let c = ((input >> 8) as u8) as char;
+    if c != '\0' {
+        append_to.push(c);
+    }
+}
+fn put(
     regs: &Registers,
     mem: &Memory,
     write: &mut impl Write,
+    handle_char: fn(u16, &mut String),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     let address = regs.get(0).as_binary();
     let mut end = address;
     let mut s = String::with_capacity(120);
     while mem[end] != 0 {
-        #[expect(
-            clippy::cast_possible_truncation,
-            reason = "Truncation is what is expected here"
-        )]
-        let c = (mem[end] as u8) as char;
-        s.push(c);
+        handle_char(mem[end], &mut s);
         end += 1;
     }
     match writeln!(write, "{s}").and_then(|()| write.flush()) {
@@ -57,7 +72,14 @@ pub fn put_s(
         Err(e) => wrap_io_error_in_cf(&e),
     }
 }
-
+/// PUTS: print null-delimited char* from register 0's address
+pub fn put_s(
+    regs: &Registers,
+    mem: &Memory,
+    write: &mut impl Write,
+) -> ControlFlow<Result<(), ExecutionError>> {
+    put(regs, mem, write, put_one_char_per_u16)
+}
 /// PUTSP: Packed version of PUTS
 ///
 /// The ASCII code contained in bits [7:0] of a memory location
@@ -65,11 +87,11 @@ pub fn put_s(
 /// can be 0x00.
 /// Writing terminates with a 0x000 char
 pub fn put_sp(
-    _regs: &Registers,
-    _mem: &Memory,
-    _write: &mut impl Write,
+    regs: &Registers,
+    mem: &Memory,
+    write: &mut impl Write,
 ) -> ControlFlow<Result<(), ExecutionError>> {
-    todo!()
+    put(regs, mem, write, put_two_chars_per_u16)
 }
 
 /// IN: Print a prompt on the screen and read a single echoed character from the keyboard.
