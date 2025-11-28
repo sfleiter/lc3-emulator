@@ -255,8 +255,10 @@ impl Emulator {
             }
             0x25 => {
                 // HALT
-                println!("\nProgram halted");
-                ControlFlow::Break(Ok(()))
+                match writeln!(writer, "\nProgram halted").and_then(|()| writer.flush()) {
+                    Ok(()) => ControlFlow::Break(Ok(())),
+                    Err(e) => Self::wrap_io_error_in_cf(&e),
+                }
             }
             tr => ControlFlow::Break(Err(ExecutionError::UnknownTrapRoutine(tr))),
         }
@@ -345,7 +347,7 @@ mod tests {
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
         emu.execute_with_writer(&mut sw).unwrap();
-        assert_that!(sw.get_string(), eq("HelloWorld!\n"));
+        assert_that!(sw.get_string(), eq("HelloWorld!\n\nProgram halted\n"));
         // TODO add more assertions for further content
     }
     #[gtest]
