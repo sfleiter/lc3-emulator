@@ -283,7 +283,7 @@ mod tests {
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
         emu.execute_with_writer(&mut sw).unwrap();
-        assert_that!(sw.get_string(), eq("HelloWorld!\n\nProgram halted\n"));
+        assert_that!(sw.get_string(), eq("HelloWorld!\nProgram halted\n"));
         // TODO add more assertions for further content
     }
     #[gtest]

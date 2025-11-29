@@ -18,9 +18,9 @@ The main goals are:
 [![Audit Dependencies](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-audit-dependencies.yml/badge.svg)](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-audit-dependencies.yml)
 [![GitHub License](https://img.shields.io/github/license/sfleiter/lc3-emulator)](https://github.com/sfleiter/lc3-emulator?tab=MIT-1-ov-file#readme)
 
-Implementation of opcodes and trap routines is still incomplete, see `todo!()` markers in [
-`opcodes.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/opcodes.rs)
-and [`emulator/mod.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/mod.rs)
+### Open Implementation tasks
+- ☐ missing opcodes, see `todo!()` markers in  [`emulator/mod.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/mod.rs)
+- ☐ memory mapped IO
 
 ## Contributing
 
