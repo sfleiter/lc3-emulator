@@ -1,5 +1,7 @@
 mod instruction;
 mod opcodes;
+#[cfg(test)]
+mod test_helpers;
 mod trap_routines;
 
 use crate::errors::{ExecutionError, LoadProgramError};
@@ -9,8 +11,9 @@ use instruction::Instruction;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Read, Write, stdout};
+use std::io::{BufReader, Read, Write, stdin, stdout};
 use std::ops::ControlFlow;
+use std::os::fd::AsRawFd;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
@@ -42,7 +45,7 @@ pub struct Emulator {
     registers: Registers,
 }
 
-fn from_program_byes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
+pub(crate) fn from_program_byes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
     let [header, program @ ..] = data else {
         return Err(LoadProgramError::ProgramMissingOrigHeader);
     };
@@ -120,21 +123,26 @@ impl Emulator {
     /// # Errors
     /// - See [`ExecutionError`]
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut writer = stdout().lock();
-        self.execute_with_writer(&mut writer)
+        let mut stdout = stdout().lock();
+        let mut stdin = stdin();
+        self.execute_with_stdin_stdout(&mut stdin, &mut stdout)
     }
 
-    fn execute_with_writer(&mut self, writer: &mut impl Write) -> Result<(), ExecutionError> {
+    fn execute_with_stdin_stdout<T: Read + AsRawFd>(
+        &mut self,
+        stdin: &mut T,
+        stdout: &mut impl Write,
+    ) -> Result<(), ExecutionError> {
         while self.registers.pc() < from_binary(self.memory.program_end()) {
             let data = self.memory[self.registers.pc().as_binary()];
             let i = Instruction::from(data);
             // println!("{i:?}");
             self.registers.inc_pc();
-            if let Some(res) = self.execute_instruction(i, writer).break_value() {
+            if let Some(res) = self.execute_instruction(i, stdin, stdout).break_value() {
                 return res;
             }
         }
-        writer.flush().expect("Could not flush output writer");
+        stdout.flush().expect("Could not flush output stdout");
         Ok(())
     }
 
@@ -142,10 +150,11 @@ impl Emulator {
         clippy::unnecessary_mut_passed,
         reason = "Needed for all opcodes thus if this fails this expect can be removed"
     )]
-    fn execute_instruction(
+    fn execute_instruction<T: Read + AsRawFd>(
         &mut self,
         instruction: Instruction,
-        writer: &mut impl Write,
+        stdin: &mut T,
+        stdout: &mut impl Write,
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         match instruction.op_code() {
             o if o == Operation::Add as u8 => opcodes::add(instruction, &mut self.registers),
@@ -165,7 +174,7 @@ impl Emulator {
             o if o == Operation::St as u8 => opcodes::st(instruction, &mut self.registers),
             o if o == Operation::Sti as u8 => opcodes::sti(instruction, &mut self.registers),
             o if o == Operation::Str as u8 => opcodes::str(instruction, &mut self.registers),
-            o if o == Operation::Trap as u8 => return self.trap(instruction, writer),
+            o if o == Operation::Trap as u8 => return self.trap(instruction, stdin, stdout),
             o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
             o if o == Operation::_Reserved as u8 => {
                 return ControlFlow::Break(Err(ExecutionError::ReservedInstructionFound(o)));
@@ -183,19 +192,20 @@ impl Emulator {
     ///
     /// # Errors
     /// - see [`ExecutionError`]
-    pub fn trap(
+    pub fn trap<T: Read + AsRawFd>(
         &mut self,
         i: Instruction,
-        mut writer: impl Write,
+        stdin: &mut T,
+        mut stdout: impl Write,
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
-            0x20 => trap_routines::get_c(&mut self.registers),
-            0x21 => trap_routines::out(&self.registers, &mut writer),
-            0x22 => trap_routines::put_s(&self.registers, &self.memory, &mut writer),
-            0x23 => trap_routines::in_trap(&mut self.registers, &mut writer),
-            0x24 => trap_routines::put_sp(&self.registers, &self.memory, &mut writer),
-            0x25 => trap_routines::halt(&mut writer),
+            0x20 => trap_routines::get_c(&mut self.registers, stdin),
+            0x21 => trap_routines::out(&self.registers, &mut stdout),
+            0x22 => trap_routines::put_s(&self.registers, &self.memory, &mut stdout),
+            0x23 => trap_routines::in_trap(&mut self.registers, stdin, &mut stdout),
+            0x24 => trap_routines::put_sp(&self.registers, &self.memory, &mut stdout),
+            0x25 => trap_routines::halt(&mut stdout),
             tr => ControlFlow::Break(Err(ExecutionError::UnknownTrapRoutine(tr))),
         }
     }
@@ -225,35 +235,14 @@ fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
 #[cfg(test)]
 mod tests {
     use crate::emulator;
+    use crate::emulator::test_helpers::{StringReader, StringWriter};
     use crate::emulator::{ORIG_HEADER, Operation};
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
     use crate::hardware::registers::from_binary;
     use googletest::prelude::*;
-    use std::io::Write;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT as usize + 1;
-
-    struct StringWriter {
-        vec: Vec<u8>,
-    }
-    impl Write for StringWriter {
-        fn write(&mut self, data: &[u8]) -> std::result::Result<usize, std::io::Error> {
-            self.vec.write(data)
-        }
-        fn flush(&mut self) -> std::result::Result<(), std::io::Error> {
-            Ok(())
-        }
-    }
-    impl StringWriter {
-        fn new() -> Self {
-            let vec = Vec::<u8>::with_capacity(120);
-            Self { vec }
-        }
-        fn get_string(&self) -> String {
-            String::from_utf8(self.vec.clone()).unwrap()
-        }
-    }
 
     #[gtest]
     pub fn test_load_program_missing_header() {
@@ -282,7 +271,8 @@ mod tests {
             assert_that!(ins.len(), eq(15));
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
-        emu.execute_with_writer(&mut sw).unwrap();
+        emu.execute_with_stdin_stdout(&mut StringReader::from_bytes(b""), &mut sw)
+            .unwrap();
         assert_that!(sw.get_string(), eq("HelloWorld!\nProgram halted\n"));
         // TODO add more assertions for further content
     }

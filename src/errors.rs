@@ -48,8 +48,8 @@ impl Error for LoadProgramError {}
 pub enum ExecutionError {
     /// The reserved opcode {0:#06b} was found which is not specified. Most probably an invalid program.
     ReservedInstructionFound(u8),
-    /// Error during writing program output: {0}
-    IOStdoutError(String),
+    /// Error during reading Stdin or writing program output to Stdout: {0}
+    IOInputOutputError(String),
     /// Unknown trap routine found: {0:#06X}
     UnknownTrapRoutine(u16),
 }

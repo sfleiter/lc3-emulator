@@ -1,16 +1,19 @@
-use std::io::stdin;
 use std::os::fd::{AsRawFd, RawFd};
-use termios::{ECHO, Termios};
+#[cfg(not(test))]
+use termios::ECHO;
+use termios::Termios;
 
 pub struct RawLock {
     fd: RawFd,
-    termios_orig: Termios,
+    termios_orig: Option<Termios>,
 }
 
 impl Drop for RawLock {
     fn drop(&mut self) {
         // terminal stays in raw mode but no means to repair
-        let _ = termios::tcsetattr(self.fd, termios::TCSAFLUSH, &self.termios_orig);
+        if let Some(termios) = self.termios_orig {
+            let _ = termios::tcsetattr(self.fd, termios::TCSAFLUSH, &termios);
+        }
     }
 }
 
@@ -19,8 +22,13 @@ pub enum EchoOptions {
     EchoOn,
     EchoOff,
 }
-pub fn set_terminal_raw(eo: EchoOptions) -> Result<RawLock, std::io::Error> {
-    let fd = stdin().as_raw_fd();
+
+#[cfg(not(test))]
+fn set_terminal_raw_prod(
+    raw_fd_provider: &impl AsRawFd,
+    eo: EchoOptions,
+) -> Result<RawLock, std::io::Error> {
+    let fd = raw_fd_provider.as_raw_fd();
     let termios_orig = termios::Termios::from_fd(fd)?;
     let mut termios_raw = termios_orig;
     // https://man7.org/linux/man-pages/man3/termios.3.html
@@ -30,5 +38,37 @@ pub fn set_terminal_raw(eo: EchoOptions) -> Result<RawLock, std::io::Error> {
         termios_raw.c_lflag |= ECHO;
     }
     termios::tcsetattr(fd, termios::TCSAFLUSH, &termios_raw)?;
-    Ok(RawLock { fd, termios_orig })
+    Ok(RawLock {
+        fd,
+        termios_orig: Some(termios_orig),
+    })
+}
+
+#[cfg(test)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the prod variant needs this and we need tp provide the same API"
+)]
+const fn set_terminal_raw_test(
+    _raw_fd_provider: &impl AsRawFd,
+    _eo: EchoOptions,
+) -> Result<RawLock, std::io::Error> {
+    Ok(RawLock {
+        fd: -1,
+        termios_orig: None,
+    })
+}
+
+#[allow(
+    clippy::missing_const_for_fn,
+    reason = "in cfg(test) this looks like it could be const"
+)]
+pub fn set_terminal_raw(
+    raw_fd_provider: &impl AsRawFd,
+    eo: EchoOptions,
+) -> Result<RawLock, std::io::Error> {
+    #[cfg(not(test))]
+    return set_terminal_raw_prod(raw_fd_provider, eo);
+    #[cfg(test)]
+    return set_terminal_raw_test(raw_fd_provider, eo);
 }
