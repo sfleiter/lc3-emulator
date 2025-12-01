@@ -135,3 +135,16 @@ impl From<Register> for ConditionFlag {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use googletest::prelude::*;
+
+    use super::*;
+    #[gtest]
+    fn test_condition_flag_values() {
+        expect_that!(ConditionFlag::Pos as u8, eq(1));
+        expect_that!(ConditionFlag::Zero as u8, eq(2));
+        expect_that!(ConditionFlag::Neg as u8, eq(4));
+    }
+}

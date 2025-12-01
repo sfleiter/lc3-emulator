@@ -18,3 +18,4 @@ termios = "0.3"
 
 [dev-dependencies]
 googletest = "0.14"
+yare = "3.0.0"
