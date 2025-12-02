@@ -77,3 +77,5 @@ to improve this project I am happy for every filed issue on that, though.
     - [CodeQL](https://github.com/github/codeql?tab=readme-ov-file#codeql) scanning for GitHub Actions and code
       - For Rust code there is the warning `Low Rust analysis quality` generated which seems to be caused by the
         issue [20643](https://github.com/github/codeql/issues/20643) tracked in the CodeQL project
+  - Manual
+    - Cross compilation to ppc64 and running tests for making sure this works for Big Endian systems  

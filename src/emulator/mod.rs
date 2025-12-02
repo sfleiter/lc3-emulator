@@ -91,7 +91,7 @@ pub fn from_program(path: &str) -> Result<Emulator, LoadProgramError> {
         reader
             .read_exact(&mut buf)
             .map_err(|e| map_err_program_not_loadable(path, e.to_string()))?;
-        file_data.push(switch_endian_bytes(buf[0], buf[1]));
+        file_data.push((u16::from(buf[0]) << 8) | u16::from(buf[1]));
         read_total += 2;
     }
     from_program_byes(file_data.as_slice())
@@ -218,18 +218,6 @@ impl Debug for Emulator {
         writeln!(f, "Registers:\n{:?}", self.registers)?;
         Ok(())
     }
-}
-
-#[inline]
-#[cfg(target_endian = "little")]
-fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
-    //eprintln!("input: 0x{data0:02X?}, 0x{data1:02X?}, result: 0x{res:04X?}");
-    u16::from(data0) << 8 | u16::from(data1)
-}
-#[inline]
-#[cfg(target_endian = "big")]
-fn switch_endian_bytes(data0: u8, data1: u8) -> u16 {
-    u16::from(data1) << 8 | u16::from(data0)
 }
 
 #[cfg(test)]
