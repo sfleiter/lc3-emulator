@@ -225,29 +225,43 @@ mod tests {
     use crate::emulator;
     use crate::emulator::test_helpers::{StringReader, StringWriter};
     use crate::emulator::{ORIG_HEADER, Operation};
+    use crate::errors::LoadProgramError;
+    use crate::errors::LoadProgramError::*;
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
     use crate::hardware::registers::from_binary;
     use googletest::prelude::*;
+    use std::error::Error;
+    use yare::parameterized;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT as usize + 1;
 
-    #[gtest]
-    pub fn test_load_program_missing_header() {
-        assert_that!(
-            emulator::from_program_byes(Vec::with_capacity(0).as_mut_slice())
-                .unwrap_err()
-                .to_string(),
-            eq("Program is missing valid .ORIG header")
-        );
+    #[parameterized(
+        missing_header = {Vec::with_capacity(0), ProgramMissingOrigHeader },
+        wrong_header = {vec![0x3001], ProgramLoadedAtWrongAddress
+            {actual_address: 0x3001, expected_address: 0x3000 } },
+        too_large = {vec![0x3000u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER + 1],
+            ProgramTooLong {actual_instructions: 52737,
+            maximum_instructions: PROGRAM_SECTION_MAX_INSTRUCTION_COUNT} },
+        empty = { vec![0x3000u16; 1], ProgramEmpty }
+    )]
+    #[test_macro(gtest)]
+    pub fn test_load_program_errors(data: Vec<u16>, error: LoadProgramError) {
+        let abstract_error =
+            Box::<dyn Error>::from(emulator::from_program_byes(data.as_slice()).unwrap_err());
+        let res = abstract_error.downcast_ref::<LoadProgramError>();
+        assert_that!(res.unwrap(), eq(&error));
     }
+
     #[gtest]
-    pub fn test_load_program_wrong_header() {
+    pub fn test_load_program_max_size() {
+        let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
+        program[0] = ORIG_HEADER;
+        let emu = emulator::from_program_byes(program.as_mut_slice()).unwrap();
+        let ins = emu.instructions();
         assert_that!(
-            emulator::from_program_byes(vec![0x3001].as_mut_slice())
-                .unwrap_err()
-                .to_string(),
-            eq("Program is not loaded at 0x3000 but 0x3001")
+            ins.len(),
+            eq(usize::from(PROGRAM_SECTION_MAX_INSTRUCTION_COUNT))
         );
     }
     #[gtest]
@@ -271,27 +285,5 @@ mod tests {
         assert_that!(emu.registers.get(2), eq(from_binary(0)));
         assert_that!(emu.registers.get(3), eq(from_binary(30)));
         // TODO add more assertions for further content
-    }
-    #[gtest]
-    pub fn test_load_program_max_size() {
-        let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
-        program[0] = ORIG_HEADER;
-        let emu = emulator::from_program_byes(program.as_mut_slice()).unwrap();
-        let ins = emu.instructions();
-        assert_that!(
-            ins.len(),
-            eq(usize::from(PROGRAM_SECTION_MAX_INSTRUCTION_COUNT))
-        );
-    }
-    #[gtest]
-    pub fn test_load_program_too_large() {
-        let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER + 1];
-        program[0] = ORIG_HEADER;
-        assert_that!(
-            emulator::from_program_byes(program.as_mut_slice())
-                .unwrap_err()
-                .to_string(),
-            eq("Program too long, got 52737 u16 instructions while limit is 52736")
-        );
     }
 }
