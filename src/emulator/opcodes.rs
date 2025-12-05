@@ -1,7 +1,21 @@
+//! Implemented operations for the LC 3.
 use crate::emulator::instruction::Instruction;
 use crate::hardware::memory::Memory;
-use crate::hardware::registers::{ConditionFlag, Registers, from_binary};
+use crate::hardware::registers::{ConditionFlag, Register, Registers, from_binary};
 
+/// ADD: Mathematical addition in 2 variants
+/// - DR is set with result of SR 1 + SR 2
+/// ```text
+///  15__12__11_9__8_6___5___4_3__2_0_
+/// | 0001 |  DR | SR1 | 0 | 00 | SR2 |
+///  ---------------------------------
+/// ```
+/// - DR is set with result of SR 1 + sign extended immediate
+/// ```text
+///  15__12__11_9__8_6___5___4___0_
+/// | 0001 |  DR | SR1 | 1 |  IMM5 |
+///  ------------------------------
+/// ```
 #[allow(
     clippy::cast_possible_truncation,
     reason = "truncation is what is specified for the LC-3 add opcode"
@@ -20,6 +34,19 @@ pub fn add(i: Instruction, r: &mut Registers) {
     );
     r.update_conditional_register(i.dr_number());
 }
+/// AND: bit-wise AND in 2 variants
+/// - DR is set with result of SR 1 AND SR 2
+/// ```text
+///  15__12__11_9__8_6___5___4_3__2_0_
+/// | 0101 |  DR | SR1 | 0 | 00 | SR2 |
+///  ---------------------------------
+/// ```
+/// - DR is set with result of SR 1 AND sign extended immediate
+/// ```text
+///  15__12__11_9__8_6___5___4___0_
+/// | 0101 |  DR | SR1 | 1 |  IMM5 |
+///  ------------------------------
+/// ```
 pub fn and(i: Instruction, r: &mut Registers) {
     r.set(
         i.dr_number(),
@@ -34,6 +61,13 @@ pub fn and(i: Instruction, r: &mut Registers) {
     );
     r.update_conditional_register(i.dr_number());
 }
+
+/// NOT: bit-wise complement of the value in SR 1
+/// ```text
+///  15__12__11_9__8_6___5___0_
+/// | 1001 |  DR | SR1 | 11111 |
+///  --------------------------
+/// ```
 pub fn not(i: Instruction, r: &mut Registers) {
     r.set(
         i.dr_number(),
@@ -41,6 +75,16 @@ pub fn not(i: Instruction, r: &mut Registers) {
     );
     r.update_conditional_register(i.dr_number());
 }
+/// BR: Conditional Branch
+/// This opcode adds the value of the sign extended offset to PC if
+/// - either none of the `nzp` bits are set
+/// - or the current state of the `ConditionFlag` matches a set bit of `n`, `z` or `p`.
+/// ```text
+///  15__12__11_9___8_______0_
+/// | 0000 |  nzp | PCoffset9 |
+///  -------------------------
+/// ```
+/// See [`ConditionFlag`]
 pub fn br(i: Instruction, r: &mut Registers) {
     let none_set = i.get_bit_range(9, 11) == 0;
     let do_break = none_set
@@ -59,10 +103,38 @@ pub fn jmp_or_ret(_i: Instruction, _r: &Registers) {
 pub fn jsr(_i: Instruction, _r: &Registers) {
     todo!()
 }
+/// LD: Loads content of memory address of PC + sign extended offset into DR.
+/// ```text
+///  15__12__11_9___8_______0_
+/// | 0010 |  DR  | PCoffset9 |
+///  -------------------------
+/// ```
 pub fn ld(i: Instruction, r: &mut Registers, memory: &Memory) {
     let value = memory[address_by_pc_offset(r, i.pc_offset(9))];
     r.set(i.dr_number(), from_binary(value));
     r.update_conditional_register(i.dr_number());
+}
+
+/// LDI: Load indirect.
+/// Calculates memory address of PC + sign extended offset and reads another address from there,
+/// the content of the memory at that indirectly loaded address is put into DR.
+/// ```text
+///  15__12__11_9___8_______0_
+/// | 1010 |  DR  | PCoffset9 |
+///  -------------------------
+/// ```
+pub fn ldi(_i: Instruction, _r: &Registers) {
+    todo!()
+}
+/// LDR: Load address from base register and adds sign extended offset to load the memory content
+/// from there into DR.
+/// ```text
+///  15__12__11_9__8___6____5____0_
+/// | 0110 |  DR | BaseR | offset6 |
+///  ------------------------------
+/// ```
+pub fn ldr(_i: Instruction, _r: &Registers) {
+    todo!()
 }
 
 fn address_by_pc_offset(r: &Registers, offset: i16) -> u16 {
@@ -70,28 +142,56 @@ fn address_by_pc_offset(r: &Registers, offset: i16) -> u16 {
     address.cast_unsigned()
 }
 
-pub fn ldi(_i: Instruction, _r: &Registers) {
-    todo!()
-}
-pub fn ldr(_i: Instruction, _r: &Registers) {
-    todo!()
-}
+/// LEA: Load Effective Address loads PC + sign extended offset into DR.
+/// ```text
+///  15__12__11_9___8_______0_
+/// | 1110 |  DR  | PCoffset9 |
+///  -------------------------
+/// ```
 pub fn lea(i: Instruction, r: &mut Registers) {
     r.set(
         i.dr_number(),
-        from_binary((r.pc().as_binary().cast_signed() + i.pc_offset(9)).cast_unsigned()),
+        Register::from_binary(address_by_pc_offset(r, i.pc_offset(9))),
     );
     r.update_conditional_register(i.dr_number());
 }
+/// ST: Store. The contents of the SR are written to memory address PC + sign extended offset.
+/// ```text
+///  15__12__11_9___8_______0_
+/// | 0011 |  SR  | PCoffset9 |
+///  -------------------------
+/// ```
 pub fn st(_i: Instruction, _r: &Registers) {
     todo!()
 }
+/// STI: Store Indirect. The contents of the SR are written to the address which is loaded from
+/// memory address PC + sign extended offset.
+/// ```text
+///  15__12__11_9___8_______0_
+/// | 1011 |  SR  | PCoffset9 |
+///  -------------------------
+/// ```
 pub fn sti(_i: Instruction, _r: &Registers) {
     todo!()
 }
+/// STR: Store contents of SR to memory address of base register plus sign extended offset.
+/// ```text
+///  15__12__11_9__8___6____5____0_
+/// | 0111 |  SR | BaseR | offset6 |
+///  ------------------------------
+/// ```
 pub fn str(_i: Instruction, _r: &Registers) {
     todo!()
 }
+/// RTI: Return from Interrupt.
+/// If the processor is running in Supervisor mode, the top two elements on the
+/// Supervisor Stack are popped and loaded into PC, PSR. If the processor is running
+/// in User mode, a privilege mode violation exception occurs.
+/// ```text
+///  15__12__11_____________0_
+/// | 1000 | 0000000000000000 |
+///  -------------------------
+/// ```
 pub fn rti(_i: Instruction, _r: &Registers) {
     todo!()
 }

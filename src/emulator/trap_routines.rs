@@ -1,3 +1,8 @@
+//! This code does emulate the trap routines but does not implement them via the opcodes of the LC3
+//! but directly.
+//!
+//! In the real system the code for these routines is at the target of the
+//! [Trap Vector Tables](https://cs131.info/Assembly/Instructions/TRAPRoutines.html#trap-vector-table).
 use crate::errors::ExecutionError;
 use crate::hardware::memory::Memory;
 use crate::hardware::registers::{Registers, from_binary};
@@ -48,7 +53,7 @@ pub fn in_trap<R: io::Read + AsRawFd>(
     read_character_from_console(regs, EchoOptions::EchoOn, stdin)
 }
 
-/// OUT: Write a character in R0[7:0] to the console display.
+/// OUT: Write a character in R0\[7:0\] to the console display.
 pub fn out(regs: &Registers, stdout: &mut impl Write) -> ControlFlow<Result<(), ExecutionError>> {
     let c: char = (regs.get(0).as_binary() & 0xFF) as u8 as char;
     write_str_out(&String::from(c), stdout)
@@ -103,7 +108,7 @@ pub fn put_s(
 
 /// PUTSP: Packed version of PUTS
 ///
-/// The ASCII code contained in bits [7:0] of a memory location is written to the console first.
+/// The ASCII code contained in bits \[7:0\] of a memory location is written to the console first.
 /// The second character of the last memory location can be 0x00.
 /// Writing terminates with a 0x000 char.
 pub fn put_sp(
