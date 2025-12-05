@@ -96,6 +96,7 @@ pub fn rti(_i: Instruction, _r: &Registers) {
     todo!()
 }
 
+#[expect(clippy::unusual_byte_groupings)]
 #[cfg(test)]
 mod tests {
     use super::*;

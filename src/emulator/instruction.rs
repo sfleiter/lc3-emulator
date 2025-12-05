@@ -98,6 +98,7 @@ impl From<u16> for Instruction {
     }
 }
 
+#[expect(clippy::unusual_byte_groupings)]
 #[cfg(test)]
 mod tests {
     use super::*;
