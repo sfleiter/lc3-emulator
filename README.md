@@ -19,8 +19,12 @@ The main goals are:
 [![codecov](https://codecov.io/github/sfleiter/lc3-emulator/graph/badge.svg?token=6Z6DRK6Q3I)](https://codecov.io/github/sfleiter/lc3-emulator)
 [![GitHub License](https://img.shields.io/github/license/sfleiter/lc3-emulator)](https://github.com/sfleiter/lc3-emulator?tab=MIT-1-ov-file#readme)
 
+See the [rustdoc documentation](https://sfleiter.github.io/lc3-emulator/),
+f.e. on [trap routines](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/trap_routines/index.html)
+or [opcodes](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/opcodes/index.html).
+
 ### Open Implementation tasks
-- ☐ missing opcodes, see `todo!()` markers in  [`emulator/mod.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/mod.rs)
+- ☐ missing opcodes, see `todo!()` markers in  [`emulator/opcodes.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/opcodes.rs)
 - ☐ memory mapped IO
 
 ## Contributing
