@@ -24,8 +24,10 @@ f.e. on [trap routines](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emu
 or [opcodes](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/opcodes/index.html).
 
 ### Open Implementation tasks
-- ☐ missing opcodes, see `todo!()` markers in  [`emulator/opcodes.rs`](https://github.com/sfleiter/lc3-emulator/blob/main/src/emulator/opcodes.rs)
-- ☐ memory mapped IO
+- ☐ [memory mapped IO](https://cs131.info/Assembly/IO/LC3IO.html)
+- ☐ Supervisor mode?
+- ☐ Interrupts?
+- ☐ Exceptions?
 
 ## Contributing
 
@@ -47,7 +49,7 @@ to improve this project I am happy for every filed issue on that, though.
     - C - [Microarchitecture of the LC-3](https://highered.mheducation.com/sites/dl/free/0072467509/104691/pat67509_appc.pdf)
     - and [more](https://highered.mheducation.com/sites/0072467509/student_view0/appendices_a__b__c__d____e.html)
 - [Hardware view on LC3](https://people.cs.georgetown.edu/~squier/Teaching/HardwareFundamentals/120-2013-CourseDocuments/Lec-7c-programmingIO.pdf)
-- [Everything you need to know on Endianess](https://www.thecodedmessage.com/posts/endian_polymorphism/)
+- [Everything you need to know on Endianness](https://www.thecodedmessage.com/posts/endian_polymorphism/)
 - [Sign Extension](https://en.wikipedia.org/wiki/Sign_extension) - Method of increasing number of bits of a number
   represented in [Two's complement](https://en.wikipedia.org/wiki/Two%27s_complement)
 
