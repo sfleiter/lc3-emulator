@@ -175,9 +175,15 @@ impl Emulator {
                 opcodes::ldr(instruction, &mut self.registers, &mut self.memory);
             }
             o if o == Operation::Lea as u8 => opcodes::lea(instruction, &mut self.registers),
-            o if o == Operation::St as u8 => opcodes::st(instruction, &mut self.registers),
-            o if o == Operation::Sti as u8 => opcodes::sti(instruction, &mut self.registers),
-            o if o == Operation::Str as u8 => opcodes::str(instruction, &mut self.registers),
+            o if o == Operation::St as u8 => {
+                opcodes::st(instruction, &self.registers, &mut self.memory);
+            }
+            o if o == Operation::Sti as u8 => {
+                opcodes::sti(instruction, &self.registers, &mut self.memory);
+            }
+            o if o == Operation::Str as u8 => {
+                opcodes::str(instruction, &self.registers, &mut self.memory);
+            }
             o if o == Operation::Trap as u8 => return self.trap(instruction, stdin, stdout),
             o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
             o if o == Operation::_Reserved as u8 => {

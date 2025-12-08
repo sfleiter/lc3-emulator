@@ -94,7 +94,7 @@ pub fn br(i: Instruction, r: &mut Registers) {
             ConditionFlag::Neg => i.get_bit(11),
         };
     if do_break {
-        r.set_pc(address_by_offset(r.pc(), i.pc_offset(9)));
+        r.set_pc(address_by_pc_offset(i, r));
     }
 }
 pub fn jmp_or_ret(_i: Instruction, _r: &Registers) {
@@ -110,7 +110,7 @@ pub fn jsr(_i: Instruction, _r: &Registers) {
 ///  -------------------------
 /// ```
 pub fn ld(i: Instruction, r: &mut Registers, memory: &Memory) {
-    let value = memory[address_by_offset(r.pc(), i.pc_offset(9))];
+    let value = memory[address_by_pc_offset(i, r)];
     r.set(i.dr_number(), from_binary(value));
     r.update_conditional_register(i.dr_number());
 }
@@ -124,7 +124,7 @@ pub fn ld(i: Instruction, r: &mut Registers, memory: &Memory) {
 ///  -------------------------
 /// ```
 pub fn ldi(i: Instruction, r: &mut Registers, memory: &Memory) {
-    let address_address = address_by_offset(r.pc(), i.pc_offset(9));
+    let address_address = address_by_pc_offset(i, r);
     let value_address = memory[address_address];
     r.set(i.dr_number(), from_binary(memory[value_address]));
     r.update_conditional_register(i.dr_number());
@@ -137,15 +137,18 @@ pub fn ldi(i: Instruction, r: &mut Registers, memory: &Memory) {
 ///  ------------------------------
 /// ```
 pub fn ldr(i: Instruction, r: &mut Registers, memory: &Memory) {
-    let base_register = i.get_bit_range_u8(6, 8, "Error in ldr");
-    let value_address = address_by_offset(r.get(base_register), i.pc_offset(6));
+    let value_address = address_by_baser_offset(i, r);
     r.set(i.dr_number(), from_binary(memory[value_address]));
     r.update_conditional_register(i.dr_number());
 }
 
-fn address_by_offset(r: Register, offset: i16) -> u16 {
-    let address = r.as_decimal() + offset;
+fn address_by_pc_offset(i: Instruction, r: &Registers) -> u16 {
+    let address = r.pc().as_decimal() + i.pc_offset(9);
     address.cast_unsigned()
+}
+fn address_by_baser_offset(i: Instruction, r: &Registers) -> u16 {
+    let base_r = i.get_bit_range_u8(6, 8, "Error in address_by_baser_offset");
+    (r.get(base_r).as_decimal() + i.pc_offset(6)).cast_unsigned()
 }
 
 /// LEA: Load Effective Address loads PC + sign extended offset into DR.
@@ -157,7 +160,7 @@ fn address_by_offset(r: Register, offset: i16) -> u16 {
 pub fn lea(i: Instruction, r: &mut Registers) {
     r.set(
         i.dr_number(),
-        Register::from_binary(address_by_offset(r.pc(), i.pc_offset(9))),
+        Register::from_binary(address_by_pc_offset(i, r)),
     );
     r.update_conditional_register(i.dr_number());
 }
@@ -167,8 +170,9 @@ pub fn lea(i: Instruction, r: &mut Registers) {
 /// | 0011 |  SR  | PCoffset9 |
 ///  -------------------------
 /// ```
-pub fn st(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn st(i: Instruction, r: &Registers, memory: &mut Memory) {
+    let store_address = address_by_pc_offset(i, r);
+    memory[store_address] = r.get(i.dr_number()).as_binary();
 }
 /// STI: Store Indirect. The contents of the SR are written to the address which is loaded from
 /// memory address PC + sign extended offset.
@@ -177,8 +181,10 @@ pub fn st(_i: Instruction, _r: &Registers) {
 /// | 1011 |  SR  | PCoffset9 |
 ///  -------------------------
 /// ```
-pub fn sti(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn sti(i: Instruction, r: &Registers, memory: &mut Memory) {
+    let address_of_store_address = address_by_pc_offset(i, r);
+    let store_address = memory[address_of_store_address];
+    memory[store_address] = r.get(i.dr_number()).as_binary();
 }
 /// STR: Store contents of SR to memory address of base register plus sign extended offset.
 /// ```text
@@ -186,8 +192,9 @@ pub fn sti(_i: Instruction, _r: &Registers) {
 /// | 0111 |  SR | BaseR | offset6 |
 ///  ------------------------------
 /// ```
-pub fn str(_i: Instruction, _r: &Registers) {
-    todo!()
+pub fn str(i: Instruction, r: &Registers, memory: &mut Memory) {
+    let store_address = address_by_baser_offset(i, r);
+    memory[store_address] = r.get(i.dr_number()).as_binary();
 }
 /// RTI: Return from Interrupt.
 /// If the processor is running in Supervisor mode, the top two elements on the
@@ -349,5 +356,39 @@ mod tests {
         ldi(0b1010_001_110100000.into(), &mut regs, &memory);
         expect_that!(regs.get(1), eq(from_binary(val_to_load_in_register)));
         expect_that!(regs.get_conditional_register(), eq(ConditionFlag::Neg));
+    }
+    #[gtest]
+    pub fn test_opcode_st() {
+        let mut regs = Registers::new();
+        let raw = vec![0; 0xC4];
+        let mut memory = Memory::with_program(&raw).expect("Error loading program");
+        regs.set(5, from_decimal(4760));
+        regs.set_pc(0x3065);
+        // ST - SR: 5, - PC_OFFSET9: -95 = -0x5F
+        st(0b0011_101_110100001.into(), &regs, &mut memory);
+        expect_that!(memory[0x3006], eq(4760));
+    }
+    #[gtest]
+    pub fn test_opcode_sti() {
+        let mut regs = Registers::new();
+        let raw = vec![0; 0xC4];
+        let mut memory = Memory::with_program(&raw).expect("Error loading program");
+        memory[0x300A] = 0x3006;
+        regs.set(7, from_decimal(1234));
+        regs.set_pc(0x3067);
+        // STI - SR: 7, - PC_OFFSET9: -93 = -0x5D
+        sti(0b1011_111_110100011.into(), &regs, &mut memory);
+        expect_that!(memory[0x3006], eq(1234));
+    }
+    #[gtest]
+    pub fn test_opcode_str() {
+        let mut regs = Registers::new();
+        let raw = vec![0; 0xC4];
+        let mut memory = Memory::with_program(&raw).expect("Error loading program");
+        regs.set(2, from_decimal(2345));
+        regs.set(6, from_binary(0x3005));
+        // STR - SR: 2, - BaseR: 6, offset6: 1 = 0x1
+        str(0b0111_010_110_000001.into(), &regs, &mut memory);
+        expect_that!(memory[0x3006], eq(2345));
     }
 }

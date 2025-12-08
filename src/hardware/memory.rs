@@ -1,6 +1,6 @@
 use crate::errors::LoadProgramError;
 use std::fmt::{Debug, Formatter};
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 pub const PROGRAM_SECTION_START: u16 = 0x3000;
 pub const PROGRAM_SECTION_END: u16 = 0xFDFF;
@@ -28,15 +28,14 @@ impl Debug for Memory {
 impl Index<u16> for Memory {
     type Output = u16;
     fn index(&self, index: u16) -> &Self::Output {
-        assert!(
-            (PROGRAM_SECTION_START..(PROGRAM_SECTION_START + self.instruction_count))
-                .contains(&index),
-            "Address {:#06X} is not in program space when indexing, valid range: {:#06X}..{:#06X}",
-            index,
-            PROGRAM_SECTION_START,
-            PROGRAM_SECTION_START + self.instruction_count
-        );
+        self.assert_valid_access(index);
         &self.data[usize::from(index)]
+    }
+}
+impl IndexMut<u16> for Memory {
+    fn index_mut(&mut self, index: u16) -> &mut Self::Output {
+        self.assert_valid_access(index);
+        &mut self.data[usize::from(index)]
     }
 }
 impl Memory {
@@ -46,6 +45,17 @@ impl Memory {
             data,
             instruction_count: 0,
         }
+    }
+    #[inline]
+    fn assert_valid_access(&self, index: u16) {
+        assert!(
+            (PROGRAM_SECTION_START..(PROGRAM_SECTION_START + self.instruction_count))
+                .contains(&index),
+            "Address {:#06X} is not in program space when indexing, valid range: {:#06X}..{:#06X}",
+            index,
+            PROGRAM_SECTION_START,
+            PROGRAM_SECTION_START + self.instruction_count
+        );
     }
     #[cfg(test)]
     pub(crate) fn with_program(program: &Vec<u16>) -> Result<Self, LoadProgramError> {
