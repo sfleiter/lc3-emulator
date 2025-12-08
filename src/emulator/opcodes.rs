@@ -97,12 +97,50 @@ pub fn br(i: Instruction, r: &mut Registers) {
         r.set_pc(address_by_pc_offset(i, r));
     }
 }
-pub fn jmp_or_ret(_i: Instruction, _r: &Registers) {
-    todo!()
+/// JSR: Jump to Sub-Routine.
+/// Two variants:
+/// - JSR to `PCOffset11`
+/// ```text
+///  15__12__11_10_________0
+/// | 0100 | 1 | PCOffset11 |
+///  -----------------------
+/// ```
+/// - JSRR: JSR to location in `BaseR`
+/// ```text
+///  15__12__11_9__8___6___5____0_
+/// | 0100 | 000 | BaseR | 000000 |
+///  -----------------------------
+/// ```
+/// The former PC is saved in R7.
+pub fn jsr(i: Instruction, r: &mut Registers) {
+    let temp_pc = r.pc();
+    r.set_pc(if i.get_bit_range(11, 11) == 1 {
+        (r.pc().as_decimal() + i.pc_offset(11)).cast_unsigned()
+    } else {
+        r.get(i.get_bit_range_u8(6, 8, "Error in JSR")).as_binary()
+    });
+    r.set(7, temp_pc);
 }
-pub fn jsr(_i: Instruction, _r: &Registers) {
-    todo!()
+/// JMP or RET operation.
+/// - JMP sets the PC to the value of register `BaseR`
+/// ```text
+///  15__12__11_9___8_6____5____0_
+/// | 1100 | 000 | BaseR | 000000 |
+///  -----------------------------
+/// ```
+/// - RET same as JMP, but special case for returning from JSR where former PC is saved in R7.
+/// ```text
+///  15__12__11_9__8_6___5____0_
+/// | 1100 | 000 | 111 | 000000 |
+///  ---------------------------
+/// ```
+pub fn jmp_or_ret(i: Instruction, r: &mut Registers) {
+    r.set_pc(
+        r.get(i.get_bit_range_u8(6, 8, "Error in jmp_or_ret"))
+            .as_binary(),
+    );
 }
+
 /// LD: Loads content of memory address of PC + sign extended offset into DR.
 /// ```text
 ///  15__12__11_9___8_______0_
@@ -376,7 +414,7 @@ mod tests {
         memory[0x300A] = 0x3006;
         regs.set(7, from_decimal(1234));
         regs.set_pc(0x3067);
-        // STI - SR: 7, - PC_OFFSET9: -93 = -0x5D
+        // STI - SR: 7, - PC_OFFSET9: -0x5D
         sti(0b1011_111_110100011.into(), &regs, &mut memory);
         expect_that!(memory[0x3006], eq(1234));
     }
@@ -387,8 +425,34 @@ mod tests {
         let mut memory = Memory::with_program(&raw).expect("Error loading program");
         regs.set(2, from_decimal(2345));
         regs.set(6, from_binary(0x3005));
-        // STR - SR: 2, - BaseR: 6, offset6: 1 = 0x1
+        // STR - SR: 2, - BaseR: 6, offset6: 0x1
         str(0b0111_010_110_000001.into(), &regs, &mut memory);
         expect_that!(memory[0x3006], eq(2345));
+    }
+    #[gtest]
+    pub fn test_opcode_jsr() {
+        let mut regs = Registers::new();
+        regs.set_pc(0x3099);
+        // JSR - PC_OFFSET11: 0x1A1
+        jsr(0b0100_1_00110100001.into(), &mut regs);
+        expect_that!(regs.pc(), eq(from_decimal(0x323A)));
+        expect_that!(regs.get(7), eq(from_decimal(0x3099)));
+
+        let mut regs = Registers::new();
+        regs.set_pc(0x3100);
+        regs.set(6, from_decimal(0x3456));
+        // JSR - BaseR: 6
+        jsr(0b0100_000_110_000000.into(), &mut regs);
+        expect_that!(regs.pc(), eq(from_decimal(0x3456)));
+        expect_that!(regs.get(7), eq(from_decimal(0x3100)));
+    }
+    #[gtest]
+    pub fn test_opcode_ret() {
+        let mut regs = Registers::new();
+        regs.set_pc(0x3020);
+        regs.set(1, from_decimal(0x3022));
+        // JMP - BaseR: 1
+        jmp_or_ret(0b1100_000_001_000000.into(), &mut regs);
+        expect_that!(regs.pc(), eq(from_decimal(0x3022)));
     }
 }
