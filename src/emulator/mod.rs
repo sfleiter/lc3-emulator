@@ -5,15 +5,17 @@ mod test_helpers;
 mod trap_routines;
 
 use crate::errors::{ExecutionError, LoadProgramError};
+use crate::hardware::keyboard;
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
+use crate::terminal;
 use instruction::Instruction;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io;
-use std::io::{BufReader, Read, Write, stdin, stdout};
+use std::io::{BufReader, Read, Write};
 use std::ops::ControlFlow;
-use std::os::fd::AsRawFd;
+use std::sync::mpsc;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
@@ -45,7 +47,7 @@ pub struct Emulator {
     registers: Registers,
 }
 
-pub(crate) fn from_program_byes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
+pub(crate) fn from_program_bytes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
     let [header, program @ ..] = data else {
         return Err(LoadProgramError::ProgramMissingOrigHeader);
     };
@@ -94,7 +96,7 @@ pub fn from_program(path: &str) -> Result<Emulator, LoadProgramError> {
         file_data.push((u16::from(buf[0]) << 8) | u16::from(buf[1]));
         read_total += 2;
     }
-    from_program_byes(file_data.as_slice())
+    from_program_bytes(file_data.as_slice())
 }
 
 fn map_err_program_not_loadable(path: &str, message: String) -> LoadProgramError {
@@ -123,14 +125,24 @@ impl Emulator {
     /// # Errors
     /// - See [`ExecutionError`]
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut stdout = stdout().lock();
-        let mut stdin = stdin();
-        self.execute_with_stdin_stdout(&mut stdin, &mut stdout)
+        let (sender, receiver) = mpsc::channel();
+        let handle = keyboard::create_keyboard_poller(sender);
+        let mut stdout = io::stdout().lock();
+        let _lock = terminal::set_terminal_raw(&io::stdin())
+            .map_err(|e| ExecutionError::IOInputOutputError(e.to_string()))?;
+        self.memory.set_keyboard_input_receiver(receiver);
+        let res = self.execute_with_stdout_no_keyboard_polling(&mut stdout);
+        self.memory.drop_kbd_receiver();
+        // if handle.is_finished() {
+        handle.join().map_err(|_| {
+            ExecutionError::IOInputOutputError(String::from("Error in keyboard polling thread"))
+        })?;
+        //}
+        res
     }
 
-    fn execute_with_stdin_stdout<T: Read + AsRawFd>(
+    fn execute_with_stdout_no_keyboard_polling(
         &mut self,
-        stdin: &mut T,
         stdout: &mut impl Write,
     ) -> Result<(), ExecutionError> {
         while self.registers.pc() < from_binary(self.memory.program_end()) {
@@ -138,7 +150,7 @@ impl Emulator {
             let i = Instruction::from(data);
             // println!("{i:?}");
             self.registers.inc_pc();
-            if let Some(res) = self.execute_instruction(i, stdin, stdout).break_value() {
+            if let Some(res) = self.execute_instruction(i, stdout).break_value() {
                 return res;
             }
         }
@@ -150,10 +162,9 @@ impl Emulator {
         clippy::unnecessary_mut_passed,
         reason = "Needed for all opcodes thus if this fails this expect can be removed"
     )]
-    fn execute_instruction<T: Read + AsRawFd>(
+    fn execute_instruction(
         &mut self,
         instruction: Instruction,
-        stdin: &mut T,
         stdout: &mut impl Write,
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         match instruction.op_code() {
@@ -184,7 +195,7 @@ impl Emulator {
             o if o == Operation::Str as u8 => {
                 opcodes::str(instruction, &self.registers, &mut self.memory);
             }
-            o if o == Operation::Trap as u8 => return self.trap(instruction, stdin, stdout),
+            o if o == Operation::Trap as u8 => return self.trap(instruction, stdout),
             o if o == Operation::Rti as u8 => opcodes::rti(instruction, &mut self.registers),
             o if o == Operation::_Reserved as u8 => {
                 return ControlFlow::Break(Err(ExecutionError::ReservedInstructionFound(o)));
@@ -202,18 +213,17 @@ impl Emulator {
     ///
     /// # Errors
     /// - see [`ExecutionError`]
-    pub fn trap<T: Read + AsRawFd>(
+    pub fn trap(
         &mut self,
         i: Instruction,
-        stdin: &mut T,
         mut stdout: impl Write,
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
-            0x20 => trap_routines::get_c(&mut self.registers, stdin),
+            0x20 => trap_routines::get_c(&mut self.registers, &self.memory, &mut stdout),
             0x21 => trap_routines::out(&self.registers, &mut stdout),
             0x22 => trap_routines::put_s(&self.registers, &self.memory, &mut stdout),
-            0x23 => trap_routines::in_trap(&mut self.registers, stdin, &mut stdout),
+            0x23 => trap_routines::in_trap(&mut self.registers, &self.memory, &mut stdout),
             0x24 => trap_routines::put_sp(&self.registers, &self.memory, &mut stdout),
             0x25 => trap_routines::halt(&mut stdout),
             tr => ControlFlow::Break(Err(ExecutionError::UnknownTrapRoutine(tr))),
@@ -233,7 +243,7 @@ impl Debug for Emulator {
 #[cfg(test)]
 mod tests {
     use crate::emulator;
-    use crate::emulator::test_helpers::{StringReader, StringWriter};
+    use crate::emulator::test_helpers::StringWriter;
     use crate::emulator::{ORIG_HEADER, Operation};
     use crate::errors::LoadProgramError;
     use crate::errors::LoadProgramError::*;
@@ -258,7 +268,7 @@ mod tests {
     #[test_macro(gtest)]
     pub fn test_load_program_errors(data: Vec<u16>, error: LoadProgramError) {
         let abstract_error =
-            Box::<dyn Error>::from(emulator::from_program_byes(data.as_slice()).unwrap_err());
+            Box::<dyn Error>::from(emulator::from_program_bytes(data.as_slice()).unwrap_err());
         let res = abstract_error.downcast_ref::<LoadProgramError>();
         assert_that!(res.unwrap(), eq(&error));
     }
@@ -267,7 +277,7 @@ mod tests {
     pub fn test_load_program_max_size() {
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
         program[0] = ORIG_HEADER;
-        let emu = emulator::from_program_byes(program.as_mut_slice()).unwrap();
+        let emu = emulator::from_program_bytes(program.as_mut_slice()).unwrap();
         let ins = emu.instructions();
         assert_that!(
             ins.len(),
@@ -283,7 +293,7 @@ mod tests {
             assert_that!(ins.len(), eq(15));
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
-        emu.execute_with_stdin_stdout(&mut StringReader::from_bytes(b""), &mut sw)
+        emu.execute_with_stdout_no_keyboard_polling(&mut sw)
             .unwrap();
         assert_that!(sw.get_string(), eq("HelloWorld!\nProgram halted\n"));
         // TODO add more assertions for further content

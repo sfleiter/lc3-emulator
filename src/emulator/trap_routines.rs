@@ -4,53 +4,58 @@
 //! In the real system the code for these routines is at the target of the
 //! [Trap Vector Tables](https://cs131.info/Assembly/Instructions/TRAPRoutines.html#trap-vector-table).
 use crate::errors::ExecutionError;
-use crate::hardware::memory::Memory;
+use crate::hardware::memory::{Memory, MemoryMappedIOLocations};
 use crate::hardware::registers::{Registers, from_binary};
-use crate::terminal;
 use crate::terminal::EchoOptions;
 use std::io;
 use std::io::Write;
 use std::ops::ControlFlow;
-use std::os::fd::AsRawFd;
+use std::thread::sleep;
+use std::time::Duration;
 
-fn read_character_from_console<R: io::Read + AsRawFd>(
+fn read_character_from_console(
     regs: &mut Registers,
     eo: EchoOptions,
-    stdin: &mut R,
+    memory: &Memory,
+    stdout: &mut impl Write,
 ) -> ControlFlow<Result<(), ExecutionError>> {
-    // Workaround for still unstable try blocks
-    match (|| {
-        let _lock = terminal::set_terminal_raw(stdin, eo)?;
-        let mut b = [0; 1];
-        stdin.read_exact(&mut b)?;
-        regs.set(0, from_binary(u16::from(b[0])));
-        Ok(())
-    })() {
-        Ok(()) => ControlFlow::Continue(()),
-        Err(e) => wrap_io_error_in_cf(&e),
+    loop {
+        if memory[MemoryMappedIOLocations::Kbsr as u16] != 0 {
+            let c = memory[MemoryMappedIOLocations::Kbdr as u16];
+            regs.set(0, from_binary(c));
+            if eo == EchoOptions::EchoOn {
+                #[allow(clippy::cast_possible_truncation)]
+                {
+                    stdout.write_all(&[c as u8]).unwrap();
+                }
+            }
+            return ControlFlow::Continue(());
+        }
+        sleep(Duration::from_millis(100));
     }
 }
 
 /// GETC: Read a single character from the keyboard. The character is not echoed onto the console.
 ///
 /// Its ASCII code is copied into R0. The high eight bits of R0 are cleared.
-pub fn get_c<R: io::Read + AsRawFd>(
+pub fn get_c(
     regs: &mut Registers,
-    stdin: &mut R,
+    memory: &Memory,
+    stdout: &mut impl Write,
 ) -> ControlFlow<Result<(), ExecutionError>> {
-    read_character_from_console(regs, EchoOptions::EchoOff, stdin)
+    read_character_from_console(regs, EchoOptions::EchoOff, memory, stdout)
 }
 
 /// IN: Print a prompt on the screen and read a single character echoed back from the keyboard.
 ///
 /// Otherwise, like 0x20 GETC.
-pub fn in_trap<R: io::Read + AsRawFd>(
+pub fn in_trap(
     regs: &mut Registers,
-    stdin: &mut R,
+    memory: &Memory,
     stdout: &mut impl Write,
 ) -> ControlFlow<Result<(), ExecutionError>> {
     write_str_out("Input: ", stdout)?;
-    read_character_from_console(regs, EchoOptions::EchoOn, stdin)
+    read_character_from_console(regs, EchoOptions::EchoOn, memory, stdout)
 }
 
 /// OUT: Write a character in R0\[7:0\] to the console display.
@@ -142,28 +147,26 @@ fn wrap_io_error_in_cf(error: &io::Error) -> ControlFlow<Result<(), ExecutionErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::emulator::test_helpers::{FakeEmulator, StringReader};
-    use crate::hardware::registers::Register;
+    use crate::emulator::test_helpers::FakeEmulator;
     use googletest::prelude::*;
+
+    fn check_register_value(regs: &Registers, idx: u8, expected: u16) {
+        expect_that!(
+            regs.get(idx).as_binary(),
+            eq(expected),
+            "{:?}",
+            regs.get(idx)
+        );
+    }
 
     #[gtest]
     pub fn test_get_c() {
-        let mut stdin = StringReader::from_bytes(b"a");
-        let mut regs = Registers::new();
-        let res = get_c(&mut regs, &mut stdin);
+        let mut emu = FakeEmulator::new(&[0u16; 0]);
+        emu.add_stdin_input(b"a");
+        let (regs, mem, mut writer) = emu.get_parts().expect("get_parts failed");
+        let res = get_c(regs, mem, &mut writer);
+        check_register_value(regs, 0, u16::from(b'a'));
         assert_that!(res, eq(&ControlFlow::Continue(())));
-    }
-    #[gtest]
-    pub fn test_get_c_read_error() {
-        let mut stdin = StringReader::with_error(b"Error during read");
-        let mut regs = Registers::new();
-        let res = get_c(&mut regs, &mut stdin);
-        assert!(res.is_break());
-        let execution_error = res.break_value().unwrap().unwrap_err();
-        assert_that!(
-            execution_error.to_string(),
-            eq("Error during reading Stdin or writing program output to Stdout: Error during read")
-        );
     }
     #[gtest]
     pub fn test_put_sp() {
@@ -172,7 +175,7 @@ mod tests {
             0x2164, 0x0000,
         ];
         let mut emu = FakeEmulator::new(&data);
-        let (regs, mem, _reader, writer) = emu.get_parts();
+        let (regs, mem, writer) = emu.get_parts().expect("get_parts failed");
         regs.set(0, from_binary(0x3005));
         let res = put_sp(regs, mem, writer);
         assert!(res.is_continue());
@@ -182,20 +185,28 @@ mod tests {
     pub fn test_in() {
         let mut emu = FakeEmulator::new(&[]);
         emu.add_stdin_input(b"abc");
-        let (regs, _mem, mut reader, writer) = emu.get_parts();
-        let res = in_trap(regs, &mut reader, writer);
+        let (regs, mem, writer) = emu.get_parts().expect("get_parts failed");
+
+        let res = in_trap(regs, mem, writer);
         assert!(res.is_continue());
-        assert_that!(writer.get_string(), eq("Input: "));
-        #[expect(clippy::cast_possible_truncation)]
-        {
-            assert_that!(regs.get(0).as_binary() as u8, eq(b'a'), "{:?}", regs.get(0));
-        }
+        check_register_value(regs, 0, u16::from(b'a'));
+
+        let res = in_trap(regs, mem, writer);
+        assert!(res.is_continue());
+        check_register_value(regs, 0, u16::from(b'b'));
+
+        let res = in_trap(regs, mem, writer);
+        assert!(res.is_continue());
+        check_register_value(regs, 0, u16::from(b'c'));
+
+        expect_that!(writer.get_string(), eq("Input: aInput: bInput: c"));
     }
+
     #[gtest]
     pub fn test_out() {
         let mut emu = FakeEmulator::new(&[]);
-        let (regs, _mem, _reader, writer) = emu.get_parts();
-        regs.set(0, Register::from_binary(u16::from(b'k')));
+        let (regs, _mem, writer) = emu.get_parts().expect("get_parts failed");
+        regs.set(0, from_binary(u16::from(b'k')));
         let res = out(regs, writer);
         assert!(res.is_continue());
         assert_that!(writer.get_string(), eq("k"));

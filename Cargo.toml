@@ -12,9 +12,9 @@ nursery = "warn"
 # cargo = "warn"
 
 [dependencies]
+enumn = "0.1.14"
 displaydoc = "0.2.5"
 termios = "0.3"
-
 
 [dev-dependencies]
 googletest = "0.14"

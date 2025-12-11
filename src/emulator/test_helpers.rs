@@ -3,45 +3,9 @@ use crate::emulator::Emulator;
 use crate::hardware::memory::Memory;
 use crate::hardware::registers::Registers;
 use std::io;
-use std::io::{Cursor, Read, Write};
-use std::os::fd::AsRawFd;
-
-pub struct StringReader<'a> {
-    bytes: &'a [u8],
-    cursor: Cursor<&'a [u8]>,
-    is_error: bool,
-}
-impl<'a> StringReader<'a> {
-    pub const fn from_bytes(data: &'a [u8]) -> Self {
-        Self {
-            bytes: data,
-            cursor: Cursor::new(data),
-            is_error: false,
-        }
-    }
-    pub const fn with_error(error_message: &'a [u8]) -> Self {
-        Self {
-            bytes: error_message,
-            cursor: Cursor::new(b""),
-            is_error: true,
-        }
-    }
-}
-impl Read for StringReader<'_> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.is_error {
-            Err(io::Error::other(String::from_utf8_lossy(self.bytes)))
-        } else {
-            self.cursor.read(buf)
-        }
-    }
-}
-impl AsRawFd for StringReader<'_> {
-    fn as_raw_fd(&self) -> i32 {
-        // In test code the result is not used, so this is okay
-        -1
-    }
-}
+use std::io::Write;
+use std::sync::mpsc;
+use std::sync::mpsc::SendError;
 
 pub struct StringWriter {
     vec: Vec<u8>,
@@ -79,7 +43,7 @@ impl<'a> FakeEmulator<'a> {
             program.extend_from_slice(program_no_header);
         }
 
-        let emu = emulator::from_program_byes(program.as_slice()).unwrap();
+        let emu = emulator::from_program_bytes(program.as_slice()).unwrap();
         let sw = StringWriter::new();
         Self {
             inner: emu,
@@ -91,25 +55,18 @@ impl<'a> FakeEmulator<'a> {
         self.stdin_data = input;
         self
     }
-    // TODO check for existing bug on that wrong lifetime assumption
-    #[expect(
-        mismatched_lifetime_syntaxes,
-        reason = "wrong same lifetime assumption for StringReader"
-    )]
     pub fn get_parts(
         &'a mut self,
-    ) -> (
-        &'a mut Registers,
-        &'a mut Memory,
-        StringReader,
-        &'a mut StringWriter,
-    ) {
-        let sr = StringReader::from_bytes(self.stdin_data);
-        (
+    ) -> Result<(&'a mut Registers, &'a mut Memory, &'a mut StringWriter), SendError<u16>> {
+        let (sender, receiver) = mpsc::channel();
+        self.inner.memory.set_keyboard_input_receiver(receiver);
+        for b in self.stdin_data {
+            sender.send(u16::from(*b))?;
+        }
+        Ok((
             &mut self.inner.registers,
             &mut self.inner.memory,
-            sr,
             &mut self.stdout,
-        )
+        ))
     }
 }

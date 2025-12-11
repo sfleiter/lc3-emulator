@@ -1,6 +1,4 @@
 use std::os::fd::{AsRawFd, RawFd};
-#[cfg(not(test))]
-use termios::ECHO;
 use termios::Termios;
 
 pub struct RawLock {
@@ -24,19 +22,12 @@ pub enum EchoOptions {
 }
 
 #[cfg(not(test))]
-fn set_terminal_raw_prod(
-    raw_fd_provider: &impl AsRawFd,
-    eo: EchoOptions,
-) -> Result<RawLock, std::io::Error> {
+fn set_terminal_raw_prod(raw_fd_provider: &impl AsRawFd) -> Result<RawLock, std::io::Error> {
     let fd = raw_fd_provider.as_raw_fd();
-    let termios_orig = termios::Termios::from_fd(fd)?;
+    let termios_orig = Termios::from_fd(fd)?;
     let mut termios_raw = termios_orig;
     // https://man7.org/linux/man-pages/man3/termios.3.html
     termios::cfmakeraw(&mut termios_raw);
-    // c_lflag ECHO needed if we want to echo characters back after all
-    if eo == EchoOptions::EchoOn {
-        termios_raw.c_lflag |= ECHO;
-    }
     termios::tcsetattr(fd, termios::TCSAFLUSH, &termios_raw)?;
     Ok(RawLock {
         fd,
@@ -49,10 +40,7 @@ fn set_terminal_raw_prod(
     clippy::unnecessary_wraps,
     reason = "the prod variant needs this and we need tp provide the same API"
 )]
-const fn set_terminal_raw_test(
-    _raw_fd_provider: &impl AsRawFd,
-    _eo: EchoOptions,
-) -> Result<RawLock, std::io::Error> {
+const fn set_terminal_raw_test(_raw_fd_provider: &impl AsRawFd) -> Result<RawLock, std::io::Error> {
     Ok(RawLock {
         fd: -1,
         termios_orig: None,
@@ -63,12 +51,9 @@ const fn set_terminal_raw_test(
     clippy::missing_const_for_fn,
     reason = "in cfg(test) this looks like it could be const"
 )]
-pub fn set_terminal_raw(
-    raw_fd_provider: &impl AsRawFd,
-    eo: EchoOptions,
-) -> Result<RawLock, std::io::Error> {
+pub fn set_terminal_raw(raw_fd_provider: &impl AsRawFd) -> Result<RawLock, std::io::Error> {
     #[cfg(not(test))]
-    return set_terminal_raw_prod(raw_fd_provider, eo);
+    return set_terminal_raw_prod(raw_fd_provider);
     #[cfg(test)]
-    return set_terminal_raw_test(raw_fd_provider, eo);
+    return set_terminal_raw_test(raw_fd_provider);
 }

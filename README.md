@@ -24,7 +24,7 @@ f.e. on [trap routines](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emu
 or [opcodes](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/opcodes/index.html).
 
 ### Open Implementation tasks
-- ☐ [memory mapped IO](https://cs131.info/Assembly/IO/LC3IO.html)
+- ☐ [Display / stdout memory mapped IO](https://cs131.info/Assembly/IO/LC3IO.html#display-status-register)
 - ☐ Supervisor mode?
 - ☐ Interrupts?
 - ☐ Exceptions?

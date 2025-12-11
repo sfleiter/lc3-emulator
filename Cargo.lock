@@ -29,6 +29,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "enumn"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f9ed6b3789237c8a0c1c505af1c7eb2c560df6186f01b098c3a1064ea532f38"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "googletest"
 version = "0.14.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -56,6 +67,7 @@ name = "lc3-emulator"
 version = "0.1.0"
 dependencies = [
  "displaydoc",
+ "enumn",
  "googletest",
  "termios",
  "yare",
