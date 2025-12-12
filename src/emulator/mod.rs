@@ -16,6 +16,8 @@ use std::io;
 use std::io::{BufReader, Read, Write};
 use std::ops::ControlFlow;
 use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
+use std::thread::JoinHandle;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
@@ -45,9 +47,20 @@ enum Operation {
 pub struct Emulator {
     memory: Memory,
     registers: Registers,
+    keyboard_poller: Option<JoinHandle<()>>,
 }
 
 pub(crate) fn from_program_bytes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
+    let (sender, receiver) = mpsc::channel();
+    let mut res = from_program_bytes_with_kbd_input_receiver(data, receiver)?;
+    res.keyboard_poller = Some(keyboard::create_keyboard_poller(sender));
+    Ok(res)
+}
+
+pub(crate) fn from_program_bytes_with_kbd_input_receiver(
+    data: &[u16],
+    kbd_input_receiver: Receiver<u16>,
+) -> Result<Emulator, LoadProgramError> {
     let [header, program @ ..] = data else {
         return Err(LoadProgramError::ProgramMissingOrigHeader);
     };
@@ -60,11 +73,12 @@ pub(crate) fn from_program_bytes(data: &[u16]) -> Result<Emulator, LoadProgramEr
     if program.is_empty() {
         return Err(LoadProgramError::ProgramEmpty);
     }
-    let mut memory = Memory::new();
+    let mut memory = Memory::new(kbd_input_receiver);
     memory.load_program(program)?;
     Ok(Emulator {
         memory,
         registers: Registers::new(),
+        keyboard_poller: None,
     })
 }
 
@@ -125,25 +139,19 @@ impl Emulator {
     /// # Errors
     /// - See [`ExecutionError`]
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let (sender, receiver) = mpsc::channel();
-        let handle = keyboard::create_keyboard_poller(sender);
+        if let Some(join_handle) = self.keyboard_poller.as_ref()
+            && join_handle.is_finished()
+        {
+            return Err(ExecutionError::IOInputOutputError(String::from(
+                "Error in keyboard polling thread caused its halt",
+            )));
+        }
         let mut stdout = io::stdout().lock();
         let _lock = terminal::set_terminal_raw(&io::stdin());
-        self.memory.set_keyboard_input_receiver(receiver);
-        let res = self.execute_with_stdout_no_keyboard_polling(&mut stdout);
-        self.memory.drop_kbd_receiver();
-        if handle.is_finished() {
-            handle.join().map_err(|_| {
-                ExecutionError::IOInputOutputError(String::from("Error in keyboard polling thread"))
-            })?;
-        }
-        res
+        self.execute_with_stdout(&mut stdout)
     }
 
-    fn execute_with_stdout_no_keyboard_polling(
-        &mut self,
-        stdout: &mut impl Write,
-    ) -> Result<(), ExecutionError> {
+    fn execute_with_stdout(&mut self, stdout: &mut impl Write) -> Result<(), ExecutionError> {
         while self.registers.pc() < from_binary(self.memory.program_end()) {
             let data = self.memory[self.registers.pc().as_binary()];
             let i = Instruction::from(data);
@@ -153,7 +161,9 @@ impl Emulator {
                 return res;
             }
         }
-        stdout.flush().expect("Could not flush output stdout");
+        stdout.flush().map_err(|e| {
+            ExecutionError::IOInputOutputError(format!("Error flushing stdout: {e}"))
+        })?;
         Ok(())
     }
 
@@ -292,8 +302,7 @@ mod tests {
             assert_that!(ins.len(), eq(15));
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
-        emu.execute_with_stdout_no_keyboard_polling(&mut sw)
-            .unwrap();
+        emu.execute_with_stdout(&mut sw).unwrap();
         assert_that!(sw.get_string(), eq("HelloWorld!\nProgram halted\n"));
         // TODO add more assertions for further content
     }

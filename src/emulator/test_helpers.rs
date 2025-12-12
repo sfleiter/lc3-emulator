@@ -32,6 +32,7 @@ pub struct FakeEmulator<'a> {
     inner: Emulator,
     stdin_data: &'a [u8],
     stdout: StringWriter,
+    keyboard_input_sender: mpsc::Sender<u16>,
 }
 impl<'a> FakeEmulator<'a> {
     pub fn new(program_no_header: &[u16]) -> Self {
@@ -42,13 +43,16 @@ impl<'a> FakeEmulator<'a> {
         } else {
             program.extend_from_slice(program_no_header);
         }
-
-        let emu = emulator::from_program_bytes(program.as_slice()).unwrap();
+        let (keyboard_input_sender, receiver) = mpsc::channel();
+        let emu =
+            emulator::from_program_bytes_with_kbd_input_receiver(program.as_slice(), receiver)
+                .unwrap();
         let sw = StringWriter::new();
         Self {
             inner: emu,
             stdin_data: b"",
             stdout: sw,
+            keyboard_input_sender,
         }
     }
     pub fn add_stdin_input(&'_ mut self, input: &'a [u8]) -> &mut Self {
@@ -58,10 +62,8 @@ impl<'a> FakeEmulator<'a> {
     pub fn get_parts(
         &'a mut self,
     ) -> Result<(&'a mut Registers, &'a mut Memory, &'a mut StringWriter), SendError<u16>> {
-        let (sender, receiver) = mpsc::channel();
-        self.inner.memory.set_keyboard_input_receiver(receiver);
         for b in self.stdin_data {
-            sender.send(u16::from(*b))?;
+            self.keyboard_input_sender.send(u16::from(*b))?;
         }
         Ok((
             &mut self.inner.registers,

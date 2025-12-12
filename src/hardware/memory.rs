@@ -17,7 +17,7 @@ pub struct Memory {
     /// Index equals memory address
     data: Vec<u16>,
     instruction_count: u16,
-    keyboard_input_receiver: Option<Receiver<u16>>,
+    keyboard_input_receiver: Receiver<u16>,
     keyboard_status_register: Cell<u16>,
     keyboard_data_register: Cell<u16>,
     u8_val_table: [u16; 256],
@@ -52,37 +52,28 @@ impl Index<u16> for Memory {
                 self.assert_valid_access(index);
                 &self.data[usize::from(index)]
             },
-            |mapped_io_loc| {
-                #[allow(clippy::option_if_let_else)]
-                if let Some(kbd_receiver) = self.keyboard_input_receiver.as_ref() {
-                    match mapped_io_loc {
-                        MemoryMappedIOLocations::Kbsr => {
-                            if self.keyboard_status_register.get()
-                                == Self::KEYBOARD_STATUS_REGISTER_UNSET
-                            {
-                                kbd_receiver.try_recv().map_or(
-                                    &Self::KEYBOARD_STATUS_REGISTER_UNSET,
-                                    |data| {
-                                        self.keyboard_status_register
-                                            .set(Self::KEYBOARD_STATUS_REGISTER_SET);
-                                        self.keyboard_data_register.set(data);
-                                        &Self::KEYBOARD_STATUS_REGISTER_SET
-                                    },
-                                )
-                            } else {
+            |mapped_io_loc| match mapped_io_loc {
+                MemoryMappedIOLocations::Kbsr => {
+                    if self.keyboard_status_register.get() == Self::KEYBOARD_STATUS_REGISTER_UNSET {
+                        self.keyboard_input_receiver.try_recv().map_or(
+                            &Self::KEYBOARD_STATUS_REGISTER_UNSET,
+                            |data| {
+                                self.keyboard_status_register
+                                    .set(Self::KEYBOARD_STATUS_REGISTER_SET);
+                                self.keyboard_data_register.set(data);
                                 &Self::KEYBOARD_STATUS_REGISTER_SET
-                            }
-                        }
-                        MemoryMappedIOLocations::Kbdr => {
-                            self.keyboard_status_register
-                                .set(Self::KEYBOARD_STATUS_REGISTER_UNSET);
-                            let res = self.keyboard_data_register.get();
-                            self.keyboard_data_register.set(0);
-                            &self.u8_val_table[res as usize]
-                        }
+                            },
+                        )
+                    } else {
+                        &Self::KEYBOARD_STATUS_REGISTER_SET
                     }
-                } else {
-                    panic!("No keyboard input receiver!");
+                }
+                MemoryMappedIOLocations::Kbdr => {
+                    self.keyboard_status_register
+                        .set(Self::KEYBOARD_STATUS_REGISTER_UNSET);
+                    let res = self.keyboard_data_register.get();
+                    self.keyboard_data_register.set(0);
+                    &self.u8_val_table[res as usize]
                 }
             },
         )
@@ -97,7 +88,7 @@ impl IndexMut<u16> for Memory {
 impl Memory {
     const KEYBOARD_STATUS_REGISTER_SET: u16 = 1 << 15;
     const KEYBOARD_STATUS_REGISTER_UNSET: u16 = 0;
-    pub fn new() -> Self {
+    pub fn new(keyboard_input_receiver: Receiver<u16>) -> Self {
         let data = vec![0x0u16; usize::from(MEMORY_SIZE_U16)];
         let mut u8_val_table: [u16; 256] = [0; 256];
         for (idx, b) in u8_val_table.iter_mut().enumerate() {
@@ -109,20 +100,12 @@ impl Memory {
         Self {
             data,
             instruction_count: 0,
-            keyboard_input_receiver: None,
+            keyboard_input_receiver,
             keyboard_status_register: Cell::from(0),
             keyboard_data_register: Cell::from(0),
             u8_val_table,
         }
     }
-    pub(crate) fn set_keyboard_input_receiver(&mut self, keyboard_input_receiver: Receiver<u16>) {
-        self.keyboard_input_receiver = Some(keyboard_input_receiver);
-    }
-    pub(crate) fn drop_kbd_receiver(&mut self) {
-        let receiver = self.keyboard_input_receiver.take();
-        drop(receiver);
-    }
-
     #[inline]
     fn assert_valid_access(&self, index: u16) {
         assert!(
@@ -138,7 +121,8 @@ impl Memory {
     pub(crate) fn with_program_no_kbd_receiver(
         program: &Vec<u16>,
     ) -> Result<Self, LoadProgramError> {
-        let mut res = Self::new();
+        let (_sender, receiver) = mpsc::channel();
+        let mut res = Self::new(receiver);
         res.load_program(program.as_ref())?;
         Ok(res)
     }
