@@ -1,3 +1,5 @@
+#[cfg(all(not(test), not(doctest)))]
+use std::io;
 use std::os::fd::{AsRawFd, RawFd};
 use termios::Termios;
 
@@ -21,39 +23,48 @@ pub enum EchoOptions {
     EchoOff,
 }
 
-#[cfg(not(test))]
-fn set_terminal_raw_prod(raw_fd_provider: &impl AsRawFd) -> Result<RawLock, std::io::Error> {
-    let fd = raw_fd_provider.as_raw_fd();
-    let termios_orig = Termios::from_fd(fd)?;
-    let mut termios_raw = termios_orig;
-    // https://man7.org/linux/man-pages/man3/termios.3.html
-    termios::cfmakeraw(&mut termios_raw);
-    termios::tcsetattr(fd, termios::TCSAFLUSH, &termios_raw)?;
-    Ok(RawLock {
-        fd,
-        termios_orig: Some(termios_orig),
-    })
+#[cfg(all(not(test), not(doctest)))]
+fn handle_set_raw_error(e: &io::Error) {
+    eprintln!("Could not set terminal to raw mode: {e}");
 }
 
-#[cfg(test)]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the prod variant needs this and we need tp provide the same API"
-)]
-const fn set_terminal_raw_test(_raw_fd_provider: &impl AsRawFd) -> Result<RawLock, std::io::Error> {
-    Ok(RawLock {
+/// Set terminal to raw in best effort mode, only log on failure, since it does not work for
+/// doctests and disabling does not work because of a
+/// [rust issue](https://github.com/rust-lang/rust/issues/67295).
+#[cfg(all(not(test), not(doctest)))]
+fn set_terminal_raw_real(raw_fd_provider: &impl AsRawFd) -> RawLock {
+    let fd = raw_fd_provider.as_raw_fd();
+    let mut termios_orig = None;
+    match Termios::from_fd(fd) {
+        Ok(termios) => {
+            termios_orig = Some(termios);
+            let mut termios_raw = termios;
+            // https://man7.org/linux/man-pages/man3/termios.3.html
+            termios::cfmakeraw(&mut termios_raw);
+            if let Err(e) = termios::tcsetattr(fd, termios::TCSAFLUSH, &termios_raw) {
+                handle_set_raw_error(&e);
+            }
+        }
+        Err(e) => handle_set_raw_error(&e),
+    }
+    RawLock { fd, termios_orig }
+}
+
+#[cfg(any(test, doctest))]
+const fn set_terminal_raw_dummy(_raw_fd_provider: &impl AsRawFd) -> RawLock {
+    RawLock {
         fd: -1,
         termios_orig: None,
-    })
+    }
 }
 
 #[allow(
     clippy::missing_const_for_fn,
     reason = "in cfg(test) this looks like it could be const"
 )]
-pub fn set_terminal_raw(raw_fd_provider: &impl AsRawFd) -> Result<RawLock, std::io::Error> {
+pub fn set_terminal_raw(raw_fd_provider: &impl AsRawFd) -> RawLock {
     #[cfg(not(test))]
-    return set_terminal_raw_prod(raw_fd_provider);
+    return set_terminal_raw_real(raw_fd_provider);
     #[cfg(test)]
-    return set_terminal_raw_test(raw_fd_provider);
+    return set_terminal_raw_dummy(raw_fd_provider);
 }

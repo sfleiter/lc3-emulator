@@ -128,8 +128,7 @@ impl Emulator {
         let (sender, receiver) = mpsc::channel();
         let handle = keyboard::create_keyboard_poller(sender);
         let mut stdout = io::stdout().lock();
-        let _lock = terminal::set_terminal_raw(&io::stdin())
-            .map_err(|e| ExecutionError::IOInputOutputError(e.to_string()))?;
+        let _lock = terminal::set_terminal_raw(&io::stdin());
         self.memory.set_keyboard_input_receiver(receiver);
         let res = self.execute_with_stdout_no_keyboard_polling(&mut stdout);
         self.memory.drop_kbd_receiver();
