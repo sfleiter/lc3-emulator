@@ -135,6 +135,10 @@ impl Emulator {
             .map(|bits| Instruction::from(*bits))
     }
 
+    /// Resets all registers to initial values including PC to provide a clean slate for another execution.
+    pub const fn reset_registers(&mut self) {
+        self.registers = Registers::new();
+    }
     /// Executes the loaded program.
     /// # Errors
     /// - See [`ExecutionError`]
