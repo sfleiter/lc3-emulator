@@ -132,11 +132,11 @@ impl Emulator {
         self.memory.set_keyboard_input_receiver(receiver);
         let res = self.execute_with_stdout_no_keyboard_polling(&mut stdout);
         self.memory.drop_kbd_receiver();
-        // if handle.is_finished() {
-        handle.join().map_err(|_| {
-            ExecutionError::IOInputOutputError(String::from("Error in keyboard polling thread"))
-        })?;
-        //}
+        if handle.is_finished() {
+            handle.join().map_err(|_| {
+                ExecutionError::IOInputOutputError(String::from("Error in keyboard polling thread"))
+            })?;
+        }
         res
     }
 
