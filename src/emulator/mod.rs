@@ -253,17 +253,25 @@ impl Debug for Emulator {
 mod tests {
     use crate::emulator;
     use crate::emulator::test_helpers::StringWriter;
-    use crate::emulator::{ORIG_HEADER, Operation};
+    use crate::emulator::{Emulator, ORIG_HEADER, Operation};
     use crate::errors::LoadProgramError;
     use crate::errors::LoadProgramError::*;
     use crate::hardware::memory::PROGRAM_SECTION_MAX_INSTRUCTION_COUNT;
     use crate::hardware::registers::from_binary;
     use googletest::prelude::*;
     use std::error::Error;
+    use std::sync::mpsc;
     use yare::parameterized;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
         PROGRAM_SECTION_MAX_INSTRUCTION_COUNT as usize + 1;
+
+    fn emu_with_program_from_vec_wo_kdb(
+        data: &Vec<u16>,
+    ) -> std::result::Result<Emulator, LoadProgramError> {
+        let (_sender, receiver) = mpsc::channel();
+        emulator::from_program_bytes_with_kbd_input_receiver(data.as_slice(), receiver)
+    }
 
     #[parameterized(
         missing_header = {Vec::with_capacity(0), ProgramMissingOrigHeader },
@@ -277,7 +285,7 @@ mod tests {
     #[test_macro(gtest)]
     pub fn test_load_program_errors(data: Vec<u16>, error: LoadProgramError) {
         let abstract_error =
-            Box::<dyn Error>::from(emulator::from_program_bytes(data.as_slice()).unwrap_err());
+            Box::<dyn Error>::from(emu_with_program_from_vec_wo_kdb(&data).unwrap_err());
         let res = abstract_error.downcast_ref::<LoadProgramError>();
         assert_that!(res.unwrap(), eq(&error));
     }
@@ -286,7 +294,7 @@ mod tests {
     pub fn test_load_program_max_size() {
         let mut program = vec![0x0u16; PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER];
         program[0] = ORIG_HEADER;
-        let emu = emulator::from_program_bytes(program.as_mut_slice()).unwrap();
+        let emu = emu_with_program_from_vec_wo_kdb(&program).unwrap();
         let ins = emu.instructions();
         assert_that!(
             ins.len(),
