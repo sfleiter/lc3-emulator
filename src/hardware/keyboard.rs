@@ -16,8 +16,8 @@ pub fn create_keyboard_poller(sender: Sender<u16>) -> JoinHandle<()> {
                 Ok(0) => break,
                 Ok(1) => {
                     let send_res = sender.send(u16::from(buf[0]));
-                    if send_res.is_err() {
-                        // receiver side closed which is an expected condition at end of Emulator::execute
+                    if let Err(e) = send_res {
+                        eprintln!("Error sending from keyboard poller {e}");
                         break;
                     }
                 }
