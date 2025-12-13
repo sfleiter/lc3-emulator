@@ -139,12 +139,23 @@ impl Emulator {
     /// # Errors
     /// - See [`ExecutionError`]
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        if let Some(join_handle) = self.keyboard_poller.as_ref()
+        if let Some(join_handle) = self.keyboard_poller.take()
             && join_handle.is_finished()
         {
-            return Err(ExecutionError::IOInputOutputError(String::from(
-                "Error in keyboard polling thread caused its halt",
-            )));
+            let (sender, receiver) = mpsc::channel();
+            self.keyboard_poller = Some(keyboard::create_keyboard_poller(sender));
+            self.memory.set_keyboard_input_receiver(receiver);
+            match join_handle.join() {
+                Ok(()) => eprintln!("Keyboard poller exited cleanly."),
+                Err(e) => {
+                    let default_error = "Unknown error";
+                    let mut poller_message = e.downcast_ref::<&str>();
+                    eprintln!(
+                        "Error in keyboard polling thread caused its halt: {}",
+                        poller_message.get_or_insert(&default_error)
+                    );
+                }
+            }
         }
         let mut stdout = io::stdout().lock();
         let _lock = terminal::set_terminal_raw(&io::stdin());

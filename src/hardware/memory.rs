@@ -23,8 +23,6 @@ pub struct Memory {
     u8_val_table: [u16; 256],
 }
 
-impl Memory {}
-
 impl Debug for Memory {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let slice = self.program_slice();
@@ -105,6 +103,9 @@ impl Memory {
             keyboard_data_register: Cell::from(0),
             u8_val_table,
         }
+    }
+    pub(crate) fn set_keyboard_input_receiver(&mut self, receiver: Receiver<u16>) {
+        self.keyboard_input_receiver = receiver;
     }
     #[inline]
     fn assert_valid_access(&self, index: u16) {
