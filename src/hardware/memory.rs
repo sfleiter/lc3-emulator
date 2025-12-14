@@ -110,8 +110,7 @@ impl Memory {
     #[inline]
     fn assert_valid_access(&self, index: u16) {
         assert!(
-            (PROGRAM_SECTION_START..(PROGRAM_SECTION_START + self.instruction_count))
-                .contains(&index),
+            (PROGRAM_SECTION_START..=(PROGRAM_SECTION_END)).contains(&index),
             "Address {:#06X} is not in program space when indexing, valid range: {:#06X}..{:#06X}",
             index,
             PROGRAM_SECTION_START,
