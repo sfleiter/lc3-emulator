@@ -1,0 +1,9 @@
+// Symbol table
+// Scope level 0:
+//	Symbol Name       Page Address
+//	----------------  ------------
+//	LOOP_START        3003
+//	FACTOR            3007
+//	LOOP_COUNT        3008
+//	ZERO              3009
+

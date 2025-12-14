@@ -126,19 +126,6 @@ fn get_file_with_size(path: &str) -> Result<(File, u64), io::Error> {
 }
 
 impl Emulator {
-    /// Return instructions parsed from loaded program.
-    #[must_use]
-    pub fn instructions(&self) -> impl ExactSizeIterator<Item = Instruction> + Debug {
-        self.memory
-            .program_slice()
-            .iter()
-            .map(|bits| Instruction::from(*bits))
-    }
-
-    /// Resets all registers to initial values including PC to provide a clean slate for another execution.
-    pub const fn reset_registers(&mut self) {
-        self.registers = Registers::new();
-    }
     /// Executes the loaded program.
     /// # Errors
     /// - See [`ExecutionError`]
@@ -164,6 +151,20 @@ impl Emulator {
         let mut stdout = io::stdout().lock();
         let _lock = terminal::set_terminal_raw(&io::stdin());
         self.execute_with_stdout(&mut stdout)
+    }
+
+    /// Resets all registers to initial values including PC to provide a clean slate for another execution.
+    pub const fn reset_registers(&mut self) {
+        self.registers = Registers::new();
+    }
+
+    /// Return instructions parsed from loaded program.
+    #[must_use]
+    pub fn instructions(&self) -> impl ExactSizeIterator<Item = Instruction> + Debug {
+        self.memory
+            .program_slice()
+            .iter()
+            .map(|bits| Instruction::from(*bits))
     }
 
     fn execute_with_stdout(&mut self, stdout: &mut impl Write) -> Result<(), ExecutionError> {
@@ -319,7 +320,7 @@ mod tests {
     #[gtest]
     pub fn test_load_program_disk_hello() {
         let mut sw = StringWriter::new();
-        let mut emu = emulator::from_program("examples/hello_world_puts.o").unwrap();
+        let mut emu = emulator::from_program("examples/hello_world_puts.obj").unwrap();
         {
             let mut ins = emu.instructions();
             assert_that!(ins.len(), eq(15));
@@ -331,7 +332,7 @@ mod tests {
     }
     #[gtest]
     pub fn test_program_add_ld_break_times_ten() {
-        let mut emu = emulator::from_program("examples/times_ten.o").unwrap();
+        let mut emu = emulator::from_program("examples/times_ten.obj").unwrap();
         emu.execute().unwrap();
         assert_that!(emu.registers.get(2), eq(from_binary(0)));
         assert_that!(emu.registers.get(3), eq(from_binary(30)));

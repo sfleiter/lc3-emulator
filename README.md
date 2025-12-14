@@ -19,15 +19,24 @@ The main goals are:
 [![codecov](https://codecov.io/github/sfleiter/lc3-emulator/graph/badge.svg?token=6Z6DRK6Q3I)](https://codecov.io/github/sfleiter/lc3-emulator)
 [![GitHub License](https://img.shields.io/github/license/sfleiter/lc3-emulator)](https://github.com/sfleiter/lc3-emulator?tab=MIT-1-ov-file#readme)
 
-See the [rustdoc documentation](https://sfleiter.github.io/lc3-emulator/),
-f.e. on [trap routines](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/trap_routines/index.html)
-or [opcodes](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/opcodes/index.html).
+### Examples
+| Command                     | Description           | Copyright | Source                                               |
+|-----------------------------|-----------------------|-----------|------------------------------------------------------|
+| `cargo run --example rogue` | Walk your `@` character through a roguelike tunnel generator to the `D`estination | Justin Meiners | [Source](https://github.com/justinmeiners/lc3-rogue) |
+| `cargo run --example 2048`  | Play the well known 2048 game. Don't know it? Play the tutorial [here](https://play2048.co/tutorial) | Ryan Pendleton | [Source](https://github.com/rpendleton/lc3-2048) |
+
+Since these programs now run without any issues, the main functionality the emulator is accomplished.
 
 ### Open Implementation tasks
 - ☐ [Display / stdout memory mapped IO](https://cs131.info/Assembly/IO/LC3IO.html#display-status-register)
 - ☐ Supervisor mode?
 - ☐ Interrupts?
 - ☐ Exceptions?
+
+## Documentation
+See the [rustdoc documentation](https://sfleiter.github.io/lc3-emulator/),
+f.e. on [trap routines](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/trap_routines/index.html)
+or [opcodes](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/opcodes/index.html).
 
 ## Contributing
 
@@ -79,10 +88,6 @@ to improve this project I am happy for every filed issue on that, though.
 ⚡ Beware: These generate incompatible obj-files ⚡ not usable with this simulator ⚡
 
 </details>
-
-### Interesting LC3 ASM examples
-- [2048 game](https://github.com/rpendleton/lc3-2048)
-- [Roguelike tunnel generator](https://github.com/justinmeiners/lc3-rogue)
 
 ## Continuous Integration (CI)
 

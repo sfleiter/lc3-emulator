@@ -1,7 +1,8 @@
 //! # LC-3 Emulator.
 //!
 //! `lc3-emulator` is an emulator of the LC-3 system.
-//! Usage starts with loading a program via [`emulator::from_program`].
+//! Usage starts with loading a program via [`emulator::from_program`] to receive an [`Emulator`](emulator::Emulator) to then execute it
+//! by [`Emulator::execute`](emulator::Emulator::execute).
 //!
 //!  # Example
 //! ```
@@ -11,7 +12,7 @@
 //! fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut emu =
 //!     // from_program returns Result<(), LoadProgramError>
-//!     emulator::from_program("examples/hello_world_puts.o")
+//!     emulator::from_program("examples/hello_world_puts.obj")
 //!         .map_err(Box::<dyn Error>::from)?;
 //!
 //!     // execute returns Result<(), ExecutionError>
