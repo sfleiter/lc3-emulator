@@ -1,5 +1,8 @@
 #[cfg(all(not(test), not(doctest)))]
 use std::io;
+#[cfg(all(not(test), not(doctest)))]
+use termios::{ISIG, OPOST};
+
 use std::os::fd::{AsRawFd, RawFd};
 use termios::Termios;
 
@@ -41,6 +44,8 @@ fn set_terminal_raw_real(raw_fd_provider: &impl AsRawFd) -> RawLock {
             let mut termios_raw = termios;
             // https://man7.org/linux/man-pages/man3/termios.3.html
             termios::cfmakeraw(&mut termios_raw);
+            termios_raw.c_lflag |= ISIG;
+            termios_raw.c_oflag |= OPOST;
             if let Err(e) = termios::tcsetattr(fd, termios::TCSAFLUSH, &termios_raw) {
                 handle_set_raw_error(&e);
             }
