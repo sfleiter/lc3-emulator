@@ -10,8 +10,11 @@ env:
   CARGO_TERM_COLOR: always
 jobs:
   build:
-    name: Built, Test and verify with Clippy
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest ]
+    name: Build, Test and verify with Clippy
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       # https://github.com/actions-rust-lang/setup-rust-toolchain
