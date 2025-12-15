@@ -251,8 +251,16 @@ pub fn rti(_i: Instruction, _r: &Registers) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::emulator::test_helpers::FakeKeyboardInputProvider;
     use crate::hardware::registers::{ConditionFlag, from_decimal};
     use googletest::prelude::*;
+
+    fn create_memory(data: &Vec<u16>) -> Memory {
+        let kip = FakeKeyboardInputProvider::new("");
+        let mut mem = Memory::new(kip);
+        mem.load_program(data).expect("Error loading program");
+        mem
+    }
 
     #[gtest]
     pub fn test_opcode_add() {
@@ -357,7 +365,7 @@ mod tests {
         let mut regs = Registers::new();
         regs.set_pc(0x3045);
         let raw = vec![4711u16, 815];
-        let memory = Memory::with_program_no_kbd_receiver(&raw).expect("Error loading program");
+        let memory = create_memory(&raw);
         // LD - DR: 4, PC_OFFSET9: -0x44
         ld(0b0010_100_1_1011_1100.into(), &mut regs, &memory);
         expect_that!(regs.get(4), eq(from_decimal(815)));
@@ -374,7 +382,7 @@ mod tests {
         let mut raw = vec![0; 6];
         let mem_val = 0b1111_1111_1111_0110; // -10
         raw[5] = mem_val;
-        let memory = Memory::with_program_no_kbd_receiver(&raw).expect("Error loading program");
+        let memory = create_memory(&raw);
         regs.set(6, from_binary(0x3025));
         // LDR - DR: 2, - BaseR: 6, OFFSET6: -32 = -0x20
         ldr(0b0110_010_110_100000.into(), &mut regs, &memory);
@@ -388,7 +396,7 @@ mod tests {
         let val_to_load_in_register = 0b1111_1111_1111_0110; // -10
         raw[3] = val_to_load_in_register;
         raw[5] = 0x3003; // absolute address of value above
-        let memory = Memory::with_program_no_kbd_receiver(&raw).expect("Error loading program");
+        let memory = create_memory(&raw);
         regs.set_pc(0x3065);
         // LDR - DR: 1, - PC_OFFSET9: -96 = -0x60
         ldi(0b1010_001_110100000.into(), &mut regs, &memory);
@@ -399,7 +407,7 @@ mod tests {
     pub fn test_opcode_st() {
         let mut regs = Registers::new();
         let raw = vec![0; 0xC4];
-        let mut memory = Memory::with_program_no_kbd_receiver(&raw).expect("Error loading program");
+        let mut memory = create_memory(&raw);
         regs.set(5, from_decimal(4760));
         regs.set_pc(0x3065);
         // ST - SR: 5, - PC_OFFSET9: -95 = -0x5F
@@ -410,7 +418,7 @@ mod tests {
     pub fn test_opcode_sti() {
         let mut regs = Registers::new();
         let raw = vec![0; 0xC4];
-        let mut memory = Memory::with_program_no_kbd_receiver(&raw).expect("Error loading program");
+        let mut memory = create_memory(&raw);
         memory[0x300A] = 0x3006;
         regs.set(7, from_decimal(1234));
         regs.set_pc(0x3067);
@@ -422,7 +430,7 @@ mod tests {
     pub fn test_opcode_str() {
         let mut regs = Registers::new();
         let raw = vec![0; 0xC4];
-        let mut memory = Memory::with_program_no_kbd_receiver(&raw).expect("Error loading program");
+        let mut memory = create_memory(&raw);
         regs.set(2, from_decimal(2345));
         regs.set(6, from_binary(0x3005));
         // STR - SR: 2, - BaseR: 6, offset6: 0x1

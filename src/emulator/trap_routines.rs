@@ -6,6 +6,7 @@
 use crate::errors::ExecutionError;
 use crate::hardware::memory::{Memory, MemoryMappedIOLocations};
 use crate::hardware::registers::{Registers, from_binary};
+use crate::terminal;
 use crate::terminal::EchoOptions;
 use std::io;
 use std::io::Write;
@@ -26,7 +27,9 @@ fn read_character_from_console(
             if eo == EchoOptions::EchoOn {
                 #[allow(clippy::cast_possible_truncation)]
                 {
-                    stdout.write_all(&[c as u8]).unwrap();
+                    let arr = &[c as u8];
+                    let output = String::from_utf8_lossy(arr);
+                    return write_str_out(output.as_ref(), stdout);
                 }
             }
             return ControlFlow::Continue(());
@@ -134,7 +137,7 @@ fn write_str_out(
     message: &str,
     stdout: &mut impl Write,
 ) -> ControlFlow<Result<(), ExecutionError>> {
-    match write!(stdout, "{message}").and_then(|()| stdout.flush()) {
+    match terminal::print(stdout, message) {
         Ok(()) => ControlFlow::Continue(()),
         Err(e) => wrap_io_error_in_cf(&e),
     }
@@ -161,9 +164,8 @@ mod tests {
 
     #[gtest]
     pub fn test_get_c() {
-        let mut emu = FakeEmulator::new(&[0u16; 0]);
-        emu.add_stdin_input(b"a");
-        let (regs, mem, mut writer) = emu.get_parts().expect("get_parts failed");
+        let mut emu = FakeEmulator::new(&[0u16; 0], "a");
+        let (regs, mem, mut writer) = emu.get_parts();
         let res = get_c(regs, mem, &mut writer);
         check_register_value(regs, 0, u16::from(b'a'));
         assert_that!(res, eq(&ControlFlow::Continue(())));
@@ -174,8 +176,8 @@ mod tests {
             0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0x6548u16, 0x6c6c, 0x206f, 0x6f57, 0x6c72,
             0x2164, 0x0000,
         ];
-        let mut emu = FakeEmulator::new(&data);
-        let (regs, mem, writer) = emu.get_parts().expect("get_parts failed");
+        let mut emu = FakeEmulator::new(&data, "");
+        let (regs, mem, writer) = emu.get_parts();
         regs.set(0, from_binary(0x3005));
         let res = put_sp(regs, mem, writer);
         assert!(res.is_continue());
@@ -183,9 +185,8 @@ mod tests {
     }
     #[gtest]
     pub fn test_in() {
-        let mut emu = FakeEmulator::new(&[]);
-        emu.add_stdin_input(b"abc");
-        let (regs, mem, writer) = emu.get_parts().expect("get_parts failed");
+        let mut emu = FakeEmulator::new(&[], "abc");
+        let (regs, mem, writer) = emu.get_parts();
 
         let res = in_trap(regs, mem, writer);
         assert!(res.is_continue());
@@ -204,8 +205,8 @@ mod tests {
 
     #[gtest]
     pub fn test_out() {
-        let mut emu = FakeEmulator::new(&[]);
-        let (regs, _mem, writer) = emu.get_parts().expect("get_parts failed");
+        let mut emu = FakeEmulator::new(&[], "");
+        let (regs, _mem, writer) = emu.get_parts();
         regs.set(0, from_binary(u16::from(b'k')));
         let res = out(regs, writer);
         assert!(res.is_continue());

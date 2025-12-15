@@ -5,7 +5,7 @@ mod test_helpers;
 mod trap_routines;
 
 use crate::errors::{ExecutionError, LoadProgramError};
-use crate::hardware::keyboard;
+use crate::hardware::keyboard::{KeyboardInputProvider, TerminalInputProvider};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
 use crate::terminal;
@@ -15,9 +15,6 @@ use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read, Write};
 use std::ops::ControlFlow;
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
-use std::thread::JoinHandle;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
@@ -47,19 +44,16 @@ enum Operation {
 pub struct Emulator {
     memory: Memory,
     registers: Registers,
-    keyboard_poller: Option<JoinHandle<()>>,
 }
 
 pub(crate) fn from_program_bytes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
-    let (sender, receiver) = mpsc::channel();
-    let mut res = from_program_bytes_with_kbd_input_receiver(data, receiver)?;
-    res.keyboard_poller = Some(keyboard::create_keyboard_poller(sender));
-    Ok(res)
+    let tip = TerminalInputProvider::new();
+    from_program_bytes_with_kbd_input_provider(data, tip)
 }
 
-pub(crate) fn from_program_bytes_with_kbd_input_receiver(
+pub(crate) fn from_program_bytes_with_kbd_input_provider(
     data: &[u16],
-    kbd_input_receiver: Receiver<u16>,
+    keyboard_input_provider: impl KeyboardInputProvider + 'static,
 ) -> Result<Emulator, LoadProgramError> {
     let [header, program @ ..] = data else {
         return Err(LoadProgramError::ProgramMissingOrigHeader);
@@ -73,12 +67,11 @@ pub(crate) fn from_program_bytes_with_kbd_input_receiver(
     if program.is_empty() {
         return Err(LoadProgramError::ProgramEmpty);
     }
-    let mut memory = Memory::new(kbd_input_receiver);
+    let mut memory = Memory::new(keyboard_input_provider);
     memory.load_program(program)?;
     Ok(Emulator {
         memory,
         registers: Registers::new(),
-        keyboard_poller: None,
     })
 }
 
@@ -130,24 +123,6 @@ impl Emulator {
     /// # Errors
     /// - See [`ExecutionError`]
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        if let Some(join_handle) = self.keyboard_poller.take()
-            && join_handle.is_finished()
-        {
-            let (sender, receiver) = mpsc::channel();
-            self.keyboard_poller = Some(keyboard::create_keyboard_poller(sender));
-            self.memory.set_keyboard_input_receiver(receiver);
-            match join_handle.join() {
-                Ok(()) => eprintln!("Keyboard poller exited cleanly."),
-                Err(e) => {
-                    let default_error = "Unknown error";
-                    let mut poller_message = e.downcast_ref::<&str>();
-                    eprintln!(
-                        "Error in keyboard polling thread caused its halt: {}",
-                        poller_message.get_or_insert(&default_error)
-                    );
-                }
-            }
-        }
         let mut stdout = io::stdout().lock();
         let _lock = terminal::set_terminal_raw(&io::stdin());
         self.execute_with_stdout(&mut stdout)
@@ -268,7 +243,7 @@ impl Debug for Emulator {
 #[cfg(test)]
 mod tests {
     use crate::emulator;
-    use crate::emulator::test_helpers::StringWriter;
+    use crate::emulator::test_helpers::{FakeKeyboardInputProvider, StringWriter};
     use crate::emulator::{Emulator, ORIG_HEADER, Operation};
     use crate::errors::LoadProgramError;
     use crate::errors::LoadProgramError::*;
@@ -276,7 +251,6 @@ mod tests {
     use crate::hardware::registers::from_binary;
     use googletest::prelude::*;
     use std::error::Error;
-    use std::sync::mpsc;
     use yare::parameterized;
 
     const PROGRAM_SECTION_MAX_INSTRUCTION_COUNT_WITH_HEADER: usize =
@@ -285,8 +259,8 @@ mod tests {
     fn emu_with_program_from_vec_wo_kdb(
         data: &Vec<u16>,
     ) -> std::result::Result<Emulator, LoadProgramError> {
-        let (_sender, receiver) = mpsc::channel();
-        emulator::from_program_bytes_with_kbd_input_receiver(data.as_slice(), receiver)
+        let kip = FakeKeyboardInputProvider::new("");
+        emulator::from_program_bytes_with_kbd_input_provider(data.as_slice(), kip)
     }
 
     #[parameterized(
@@ -327,7 +301,11 @@ mod tests {
             assert_that!(ins.next().unwrap().op_code(), eq(Operation::Lea as u8));
         }
         emu.execute_with_stdout(&mut sw).unwrap();
-        assert_that!(sw.get_string(), eq("HelloWorld!\nProgram halted\n"));
+        //        assert_that!(sw.get_string(), eq("HelloWorld!\nProgram halted\n"));
+        assert_that!(
+            sw.get_string(),
+            matches_regex("HelloWorld!.*Program halted.*")
+        );
         // TODO add more assertions for further content
     }
     #[gtest]

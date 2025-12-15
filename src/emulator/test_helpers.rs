@@ -1,11 +1,10 @@
 use crate::emulator;
 use crate::emulator::Emulator;
+use crate::hardware::keyboard::KeyboardInputProvider;
 use crate::hardware::memory::Memory;
 use crate::hardware::registers::Registers;
 use std::io;
 use std::io::Write;
-use std::sync::mpsc;
-use std::sync::mpsc::SendError;
 
 pub struct StringWriter {
     vec: Vec<u8>,
@@ -28,14 +27,44 @@ impl StringWriter {
     }
 }
 
-pub struct FakeEmulator<'a> {
-    inner: Emulator,
-    stdin_data: &'a [u8],
-    stdout: StringWriter,
-    keyboard_input_sender: mpsc::Sender<u16>,
+pub struct FakeKeyboardInputProvider {
+    input_data: String,
+    index: usize,
 }
-impl<'a> FakeEmulator<'a> {
-    pub fn new(program_no_header: &[u16]) -> Self {
+impl FakeKeyboardInputProvider {
+    pub fn new(input: &str) -> Self {
+        Self {
+            input_data: input.into(),
+            index: 0,
+        }
+    }
+}
+impl KeyboardInputProvider for FakeKeyboardInputProvider {
+    fn check_input_available(&mut self) -> io::Result<bool> {
+        if self.index >= self.input_data.len() {
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
+    fn get_input_character(&mut self) -> char {
+        if self.check_input_available().unwrap() {
+            let res = self.input_data.as_bytes()[self.index];
+            self.index += 1;
+            res as char
+        } else {
+            panic!("No input available");
+        }
+    }
+}
+
+pub struct FakeEmulator {
+    inner: Emulator,
+    stdout: StringWriter,
+}
+impl FakeEmulator {
+    pub fn new(program_no_header: &[u16], input: &str) -> Self {
         let mut program = Vec::with_capacity(program_no_header.len() + 1);
         program.push(0x3000u16);
         if program_no_header.is_empty() {
@@ -43,32 +72,23 @@ impl<'a> FakeEmulator<'a> {
         } else {
             program.extend_from_slice(program_no_header);
         }
-        let (keyboard_input_sender, receiver) = mpsc::channel();
-        let emu =
-            emulator::from_program_bytes_with_kbd_input_receiver(program.as_slice(), receiver)
-                .unwrap();
+        let keyboard_input_provider = FakeKeyboardInputProvider::new(input);
+        let emu = emulator::from_program_bytes_with_kbd_input_provider(
+            program.as_slice(),
+            keyboard_input_provider,
+        )
+        .unwrap();
         let sw = StringWriter::new();
         Self {
             inner: emu,
-            stdin_data: b"",
             stdout: sw,
-            keyboard_input_sender,
         }
     }
-    pub fn add_stdin_input(&'_ mut self, input: &'a [u8]) -> &mut Self {
-        self.stdin_data = input;
-        self
-    }
-    pub fn get_parts(
-        &'a mut self,
-    ) -> Result<(&'a mut Registers, &'a mut Memory, &'a mut StringWriter), SendError<u16>> {
-        for b in self.stdin_data {
-            self.keyboard_input_sender.send(u16::from(*b))?;
-        }
-        Ok((
+    pub fn get_parts(&mut self) -> (&mut Registers, &mut Memory, &mut StringWriter) {
+        (
             &mut self.inner.registers,
             &mut self.inner.memory,
             &mut self.stdout,
-        ))
+        )
     }
 }

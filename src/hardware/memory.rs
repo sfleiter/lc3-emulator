@@ -1,10 +1,8 @@
 use crate::errors::LoadProgramError;
-use std::cell::Cell;
+use crate::hardware::keyboard::KeyboardInputProvider;
+use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::ops::{Index, IndexMut};
-#[allow(unused_imports)] // TODO RustRover false positive
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
 
 pub const PROGRAM_SECTION_START: u16 = 0x3000;
 pub const PROGRAM_SECTION_END: u16 = 0xFDFF;
@@ -17,9 +15,7 @@ pub struct Memory {
     /// Index equals memory address
     data: Vec<u16>,
     instruction_count: u16,
-    keyboard_input_receiver: Receiver<u16>,
-    keyboard_status_register: Cell<u16>,
-    keyboard_data_register: Cell<u16>,
+    keyboard_input_provider: Box<RefCell<dyn KeyboardInputProvider>>,
     u8_val_table: [u16; 256],
 }
 
@@ -52,25 +48,22 @@ impl Index<u16> for Memory {
             },
             |mapped_io_loc| match mapped_io_loc {
                 MemoryMappedIOLocations::Kbsr => {
-                    if self.keyboard_status_register.get() == Self::KEYBOARD_STATUS_REGISTER_UNSET {
-                        self.keyboard_input_receiver.try_recv().map_or(
-                            &Self::KEYBOARD_STATUS_REGISTER_UNSET,
-                            |data| {
-                                self.keyboard_status_register
-                                    .set(Self::KEYBOARD_STATUS_REGISTER_SET);
-                                self.keyboard_data_register.set(data);
-                                &Self::KEYBOARD_STATUS_REGISTER_SET
-                            },
-                        )
-                    } else {
+                    if self
+                        .keyboard_input_provider
+                        .borrow_mut()
+                        .check_input_available()
+                        .unwrap_or(false)
+                    {
                         &Self::KEYBOARD_STATUS_REGISTER_SET
+                    } else {
+                        &Self::KEYBOARD_STATUS_REGISTER_UNSET
                     }
                 }
                 MemoryMappedIOLocations::Kbdr => {
-                    self.keyboard_status_register
-                        .set(Self::KEYBOARD_STATUS_REGISTER_UNSET);
-                    let res = self.keyboard_data_register.get();
-                    self.keyboard_data_register.set(0);
+                    let res = self
+                        .keyboard_input_provider
+                        .borrow_mut()
+                        .get_input_character();
                     &self.u8_val_table[res as usize]
                 }
             },
@@ -86,7 +79,7 @@ impl IndexMut<u16> for Memory {
 impl Memory {
     const KEYBOARD_STATUS_REGISTER_SET: u16 = 1 << 15;
     const KEYBOARD_STATUS_REGISTER_UNSET: u16 = 0;
-    pub fn new(keyboard_input_receiver: Receiver<u16>) -> Self {
+    pub fn new(keyboard_input_provider: impl KeyboardInputProvider + 'static) -> Self {
         let data = vec![0x0u16; usize::from(MEMORY_SIZE_U16)];
         let mut u8_val_table: [u16; 256] = [0; 256];
         for (idx, b) in u8_val_table.iter_mut().enumerate() {
@@ -98,33 +91,19 @@ impl Memory {
         Self {
             data,
             instruction_count: 0,
-            keyboard_input_receiver,
-            keyboard_status_register: Cell::from(0),
-            keyboard_data_register: Cell::from(0),
+            keyboard_input_provider: Box::new(RefCell::new(keyboard_input_provider)),
             u8_val_table,
         }
-    }
-    pub(crate) fn set_keyboard_input_receiver(&mut self, receiver: Receiver<u16>) {
-        self.keyboard_input_receiver = receiver;
     }
     #[inline]
     fn assert_valid_access(&self, index: u16) {
         assert!(
-            (PROGRAM_SECTION_START..=(PROGRAM_SECTION_END)).contains(&index),
+            (PROGRAM_SECTION_START..=PROGRAM_SECTION_END).contains(&index),
             "Address {:#06X} is not in program space when indexing, valid range: {:#06X}..{:#06X}",
             index,
             PROGRAM_SECTION_START,
             PROGRAM_SECTION_START + self.instruction_count
         );
-    }
-    #[cfg(test)]
-    pub(crate) fn with_program_no_kbd_receiver(
-        program: &Vec<u16>,
-    ) -> Result<Self, LoadProgramError> {
-        let (_sender, receiver) = mpsc::channel();
-        let mut res = Self::new(receiver);
-        res.load_program(program.as_ref())?;
-        Ok(res)
     }
     /// Loads a program without an `.ORIG` header into the memory section
     /// starting from address `_PROGRAM_SECTION_START_BYTES`

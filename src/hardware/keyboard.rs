@@ -1,29 +1,38 @@
-use std::error::Error;
-use std::io::{Read, stdin};
-use std::sync::mpsc::Sender;
-use std::thread;
-use std::thread::JoinHandle;
+use crossterm::event::{poll, read};
+use std::io;
+use std::time::Duration;
 
-fn exit_on_error(e: impl Error) -> ! {
-    panic!("Error in keyboard poller: {e}");
+pub trait KeyboardInputProvider {
+    fn check_input_available(&mut self) -> io::Result<bool>;
+    fn get_input_character(&mut self) -> char;
 }
-#[must_use]
-pub fn create_keyboard_poller(sender: Sender<u16>) -> JoinHandle<()> {
-    thread::spawn(move || {
-        let mut buf = [0u8; 1];
-        loop {
-            match stdin().read(&mut buf) {
-                Ok(0) => break,
-                Ok(1) => {
-                    let send_res = sender.send(u16::from(buf[0]));
-                    if let Err(e) = send_res {
-                        eprintln!("Error sending from keyboard poller {e}");
-                        break;
-                    }
-                }
-                Ok(_) => unreachable!(),
-                Err(e) => exit_on_error(e),
-            }
+
+pub struct TerminalInputProvider {
+    is_char_available: bool,
+    available_char: Option<char>,
+}
+impl TerminalInputProvider {
+    pub const fn new() -> Self {
+        Self {
+            is_char_available: false,
+            available_char: None,
         }
-    })
+    }
+}
+impl KeyboardInputProvider for TerminalInputProvider {
+    fn check_input_available(&mut self) -> io::Result<bool> {
+        if poll(Duration::from_secs(0))?
+            && let Some(event) = read()?.as_key_event()
+            && let Some(c) = event.code.as_char()
+        {
+            self.is_char_available = true;
+            self.available_char = Some(c);
+            return Ok(true);
+        }
+        Ok(false)
+    }
+    fn get_input_character(&mut self) -> char {
+        self.available_char
+            .unwrap_or_else(|| panic!("No input available"))
+    }
 }
