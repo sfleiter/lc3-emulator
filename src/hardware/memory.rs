@@ -3,6 +3,7 @@ use crate::hardware::keyboard::KeyboardInputProvider;
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 
 pub const PROGRAM_SECTION_START: u16 = 0x3000;
 pub const PROGRAM_SECTION_END: u16 = 0xFDFF;
@@ -15,7 +16,7 @@ pub struct Memory {
     /// Index equals memory address
     data: Vec<u16>,
     instruction_count: u16,
-    keyboard_input_provider: Box<RefCell<dyn KeyboardInputProvider>>,
+    keyboard_input_provider: Rc<RefCell<dyn KeyboardInputProvider>>,
     u8_val_table: [u16; 256],
 }
 
@@ -79,7 +80,7 @@ impl IndexMut<u16> for Memory {
 impl Memory {
     const KEYBOARD_STATUS_REGISTER_SET: u16 = 1 << 15;
     const KEYBOARD_STATUS_REGISTER_UNSET: u16 = 0;
-    pub fn new(keyboard_input_provider: impl KeyboardInputProvider + 'static) -> Self {
+    pub fn new(keyboard_input_provider: Rc<RefCell<dyn KeyboardInputProvider>>) -> Self {
         let data = vec![0x0u16; usize::from(MEMORY_SIZE_U16)];
         let mut u8_val_table: [u16; 256] = [0; 256];
         for (idx, b) in u8_val_table.iter_mut().enumerate() {
@@ -91,7 +92,7 @@ impl Memory {
         Self {
             data,
             instruction_count: 0,
-            keyboard_input_provider: Box::new(RefCell::new(keyboard_input_provider)),
+            keyboard_input_provider,
             u8_val_table,
         }
     }

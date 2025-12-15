@@ -10,11 +10,13 @@ use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
 use crate::hardware::registers::{Registers, from_binary};
 use crate::terminal;
 use instruction::Instruction;
+use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, Read, Write};
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
 const ORIG_HEADER: u16 = PROGRAM_SECTION_START;
 
@@ -44,6 +46,7 @@ enum Operation {
 pub struct Emulator {
     memory: Memory,
     registers: Registers,
+    keyboard_input_provider: Rc<RefCell<dyn KeyboardInputProvider>>,
 }
 
 pub(crate) fn from_program_bytes(data: &[u16]) -> Result<Emulator, LoadProgramError> {
@@ -67,11 +70,13 @@ pub(crate) fn from_program_bytes_with_kbd_input_provider(
     if program.is_empty() {
         return Err(LoadProgramError::ProgramEmpty);
     }
-    let mut memory = Memory::new(keyboard_input_provider);
+    let rc_kpi = Rc::new(RefCell::new(keyboard_input_provider));
+    let mut memory = Memory::new(rc_kpi.clone());
     memory.load_program(program)?;
     Ok(Emulator {
         memory,
         registers: Registers::new(),
+        keyboard_input_provider: rc_kpi,
     })
 }
 
@@ -167,6 +172,9 @@ impl Emulator {
         instruction: Instruction,
         stdout: &mut impl Write,
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
+        if self.keyboard_input_provider.borrow().is_interrupted() {
+            return ControlFlow::Break(Ok(()));
+        }
         match instruction.op_code() {
             o if o == Operation::Add as u8 => opcodes::add(instruction, &mut self.registers),
             o if o == Operation::And as u8 => opcodes::and(instruction, &mut self.registers),

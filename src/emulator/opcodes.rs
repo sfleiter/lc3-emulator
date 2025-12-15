@@ -254,10 +254,12 @@ mod tests {
     use crate::emulator::test_helpers::FakeKeyboardInputProvider;
     use crate::hardware::registers::{ConditionFlag, from_decimal};
     use googletest::prelude::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
-    fn create_memory(data: &Vec<u16>) -> Memory {
+    fn create_memory(data: &[u16]) -> Memory {
         let kip = FakeKeyboardInputProvider::new("");
-        let mut mem = Memory::new(kip);
+        let mut mem = Memory::new(Rc::new(RefCell::new(kip)));
         mem.load_program(data).expect("Error loading program");
         mem
     }

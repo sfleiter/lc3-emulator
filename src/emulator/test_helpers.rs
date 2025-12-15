@@ -47,7 +47,6 @@ impl KeyboardInputProvider for FakeKeyboardInputProvider {
             Ok(true)
         }
     }
-
     fn get_input_character(&mut self) -> char {
         if self.check_input_available().unwrap() {
             let res = self.input_data.as_bytes()[self.index];
@@ -56,6 +55,9 @@ impl KeyboardInputProvider for FakeKeyboardInputProvider {
         } else {
             panic!("No input available");
         }
+    }
+    fn is_interrupted(&self) -> bool {
+        false
     }
 }
 
