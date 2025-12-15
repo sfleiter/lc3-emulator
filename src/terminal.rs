@@ -1,10 +1,6 @@
-#[cfg(all(not(test), not(doctest)))]
 use std::io;
-#[cfg(all(not(test), not(doctest)))]
-use termios::{ISIG, OPOST};
-
 use std::os::fd::{AsRawFd, RawFd};
-use termios::Termios;
+use termios::{ISIG, OPOST, Termios};
 
 pub struct RawLock {
     fd: RawFd,
@@ -26,7 +22,6 @@ pub enum EchoOptions {
     EchoOff,
 }
 
-#[cfg(all(not(test), not(doctest)))]
 fn handle_set_raw_error(e: &io::Error) {
     eprintln!("Could not set terminal to raw mode: {e}");
 }
@@ -34,8 +29,7 @@ fn handle_set_raw_error(e: &io::Error) {
 /// Set terminal to raw in best effort mode, only log on failure, since it does not work for
 /// doctests and disabling does not work because of a
 /// [rust issue](https://github.com/rust-lang/rust/issues/67295).
-#[cfg(all(not(test), not(doctest)))]
-fn set_terminal_raw_real(raw_fd_provider: &impl AsRawFd) -> RawLock {
+pub fn set_terminal_raw(raw_fd_provider: &impl AsRawFd) -> RawLock {
     let fd = raw_fd_provider.as_raw_fd();
     let mut termios_orig = None;
     match Termios::from_fd(fd) {
@@ -53,23 +47,4 @@ fn set_terminal_raw_real(raw_fd_provider: &impl AsRawFd) -> RawLock {
         Err(e) => handle_set_raw_error(&e),
     }
     RawLock { fd, termios_orig }
-}
-
-#[cfg(any(test, doctest))]
-const fn set_terminal_raw_dummy(_raw_fd_provider: &impl AsRawFd) -> RawLock {
-    RawLock {
-        fd: -1,
-        termios_orig: None,
-    }
-}
-
-#[allow(
-    clippy::missing_const_for_fn,
-    reason = "in cfg(test) this looks like it could be const"
-)]
-pub fn set_terminal_raw(raw_fd_provider: &impl AsRawFd) -> RawLock {
-    #[cfg(not(test))]
-    return set_terminal_raw_real(raw_fd_provider);
-    #[cfg(test)]
-    return set_terminal_raw_dummy(raw_fd_provider);
 }
