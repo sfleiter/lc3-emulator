@@ -14,16 +14,16 @@ The main goals are:
 ## Status
 
 [![Minimum Supported Rust Version](https://img.shields.io/badge/dynamic/toml?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsfleiter%2Flc3-emulator%2Fmain%2FCargo.toml&query=%24%5B%22package%22%5D.rust-version&label=MSRV)](https://doc.rust-lang.org/cargo/reference/rust-version.html#rust-version)
-[![Build Status](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust.yml/badge.svg)](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust.yml)
+[![Build Status](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-build.yml/badge.svg)](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-build.yml)
 [![Audit Dependencies](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-audit-dependencies.yml/badge.svg)](https://github.com/sfleiter/lc3-emulator/actions/workflows/rust-audit-dependencies.yml)
 [![codecov](https://codecov.io/github/sfleiter/lc3-emulator/graph/badge.svg?token=6Z6DRK6Q3I)](https://codecov.io/github/sfleiter/lc3-emulator)
 [![GitHub License](https://img.shields.io/github/license/sfleiter/lc3-emulator)](https://github.com/sfleiter/lc3-emulator?tab=MIT-1-ov-file#readme)
 
 ### Examples
-| Command                     | Description           | Copyright | Source                                               |
-|-----------------------------|-----------------------|-----------|------------------------------------------------------|
-| `cargo run --example rogue` | Walk your `@` character through a roguelike tunnel generator to the `D`estination | Justin Meiners | [Source](https://github.com/justinmeiners/lc3-rogue) |
-| `cargo run --example 2048`  | Play the well known 2048 game. Don't know it? Play the tutorial [here](https://play2048.co/tutorial) | Ryan Pendleton | [Source](https://github.com/rpendleton/lc3-2048) |
+| Command                     | Description                                                                                          | Copyright      | Source                                               |
+|-----------------------------|------------------------------------------------------------------------------------------------------|----------------|------------------------------------------------------|
+| `cargo run --example rogue` | Walk your `@` character through a roguelike tunnel generator to the `D`estination                    | Justin Meiners | [Source](https://github.com/justinmeiners/lc3-rogue) |
+| `cargo run --example 2048`  | Play the well known 2048 game. Don't know it? Play the tutorial [here](https://play2048.co/tutorial) | Ryan Pendleton | [Source](https://github.com/rpendleton/lc3-2048)     |
 
 Since these programs now run without any issues, the main functionality the emulator is accomplished.
 

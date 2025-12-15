@@ -5,6 +5,12 @@ name: Generate README.md
 permissions:
   contents: write
 on:
+  # push:
+  #   paths:
+  #     # Run if workflow changes
+  #     - '.github/workflows/generate-readme.yml'
+  #     # Run on changed Cargo.toml where package.rust-version resides
+  #     - '**/Cargo.toml'
   workflow_call:
     inputs:
       msrv:

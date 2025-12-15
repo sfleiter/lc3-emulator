@@ -1,4 +1,4 @@
-name: Cross Compilation to Big Endian Build and Test (main)
+name: Cross Compilation to Big Endian Build and Test (manual only)
 permissions:
   contents: read
 on:

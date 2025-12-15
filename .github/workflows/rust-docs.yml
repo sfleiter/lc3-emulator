@@ -1,4 +1,4 @@
-name: Build (main)
+name: Code documentation
 permissions:
   contents: read
 on:
@@ -10,20 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 jobs:
   build:
-    name: Built, Test and verify with Clippy
+    name: Create, update and deploy rustdoc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       # https://github.com/actions-rust-lang/setup-rust-toolchain
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: clippy
-      - name: Clippy
-        run: cargo clippy
-      - name: Build
-        run: cargo build
-      - name: Run tests
-        run: cargo test
       - name: Setup pages
         id: pages
         uses: actions/configure-pages@v5
@@ -53,35 +45,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-  msrv:
-    name: Verify Minimum Stable Rust Version (MSRV) guarantee
-    runs-on: ubuntu-latest
-    outputs:
-      msrv-version: ${{ steps.msrv-version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v6
-      - uses: cargo-bins/cargo-binstall@main
-      - run: |
-          cargo binstall --no-confirm cargo-msrv --locked
-          cargo-msrv verify
-      # - id: msrv-version
-      #   run: |
-      #     version=$(cargo-msrv show --output-format minimal)
-      #     echo "version=$version" >> "$GITHUB_OUTPUT"
-  # call-generate-readme:
-  #   permissions:
-  #     contents: write
-  #   needs: msrv
-  #   uses: ./.github/workflows/generate-readme.yml
-  #   with:
-  #     msrv: ${{ needs.msrv.outputs.msrv-version }}
-  formatting:
-    name: cargo fmt
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          components: rustfmt
-      - name: Rustfmt Check
-        uses: actions-rust-lang/rustfmt@v1
