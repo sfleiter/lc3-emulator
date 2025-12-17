@@ -1,0 +1,3 @@
+[build]
+# prevent crossterm cursor::position() from hanging by deactivating capture which also needs unstable-options
+# rustdocflags = ["--no-capture", "-Z", "unstable-options"]

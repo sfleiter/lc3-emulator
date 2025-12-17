@@ -1,7 +1,8 @@
 use crossterm::{ExecutableCommand, cursor, execute, terminal};
 use std::io;
-use std::io::{Write, stdout};
-use std::os::fd::AsRawFd;
+use std::io::Write;
+
+use crate::emulator::stdout_helpers::CrosstermCompatibility;
 
 pub struct RawLock {}
 
@@ -27,32 +28,29 @@ fn handle_set_raw_error(e: &io::Error) {
 /// Set terminal to raw in best-effort mode, only log on failure, since it does not work for
 /// cargo doc tests and disabling does not work because of a
 /// [rust issue](https://github.com/rust-lang/rust/issues/67295).
-pub fn set_terminal_raw(_raw_fd_provider: &impl AsRawFd) -> RawLock {
-    if let Err(e) = terminal::enable_raw_mode() {
+pub fn set_terminal_raw(mut stdout: impl Write) -> RawLock {
+    if let Err(e) =
+        terminal::enable_raw_mode().and_then(|()| stdout.execute(terminal::EnableLineWrap))
+    {
         handle_set_raw_error(&e);
     }
-    let mut stdout = stdout();
-    stdout.execute(terminal::EnableLineWrap).unwrap();
     RawLock {}
 }
 
-const fn in_test() -> bool {
-    #[cfg(test)]
-    {
-        true
-    }
-    #[cfg(not(test))]
-    {
-        false
-    }
+fn can_query_size_or_position(stdout: &(impl Write + CrosstermCompatibility)) -> bool {
+    !(*stdout).will_block_on_size_or_position_queries()
 }
 
-pub fn print(stdout: &mut impl Write, data: &str) -> io::Result<()> {
-    let (_column_count, row_count) = terminal::size()?;
-    let (_column, mut row) = if in_test() {
-        (0, 0)
+pub fn print(stdout: &mut (impl Write + CrosstermCompatibility), data: &str) -> io::Result<()> {
+    let (_column_count, row_count) = if can_query_size_or_position(stdout) {
+        terminal::size()?
     } else {
+        (1, 1)
+    };
+    let (_column, mut row) = if can_query_size_or_position(stdout) {
         cursor::position()?
+    } else {
+        (0, 0)
     };
     for (idx, part) in data.split('\n').enumerate() {
         row += 1;

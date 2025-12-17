@@ -7,17 +7,21 @@
 //!  # Example
 //! ```
 //! use lc3_emulator::emulator;
+//! use lc3_emulator::hardware;
+//! use lc3_emulator::emulator::stdout_helpers::StdoutForDocTest;
 //! use std::error::Error;
 //!
 //! fn main() -> Result<(), Box<dyn Error>> {
 //!     let mut emu =
-//!     // from_program returns Result<(), LoadProgramError>
-//!     emulator::from_program("examples/hello_world_puts.obj")
-//!         .map_err(Box::<dyn Error>::from)?;
+//!         // from_program returns Result<(), LoadProgramError>
+//!        emulator::from_program("examples/times_ten.obj")
+//!            .map_err(Box::<dyn Error>::from)?;
 //!
+//!     let mut stdout = StdoutForDocTest::new();
 //!     // execute returns Result<(), ExecutionError>
-//!     emu.execute()
-//!         .map_err(Box::<dyn Error>::from)
+//!     emu.execute_with_stdout(&mut stdout).map_err(Box::<dyn Error>::from)?;
+//!     assert_eq!(30, emu.registers().get(3).as_decimal());
+//!     Ok(())
 //! }
 //! ```
 //! # Errors

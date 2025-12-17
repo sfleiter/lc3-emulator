@@ -1,9 +1,11 @@
 mod instruction;
 mod opcodes;
+pub mod stdout_helpers;
 #[cfg(test)]
 mod test_helpers;
 mod trap_routines;
 
+use crate::emulator::stdout_helpers::CrosstermCompatibility;
 use crate::errors::{ExecutionError, LoadProgramError};
 use crate::hardware::keyboard::{KeyboardInputProvider, TerminalInputProvider};
 use crate::hardware::memory::{Memory, PROGRAM_SECTION_START};
@@ -124,12 +126,16 @@ fn get_file_with_size(path: &str) -> Result<(File, u64), io::Error> {
 }
 
 impl Emulator {
+    #[must_use]
+    pub const fn registers(&mut self) -> &mut Registers {
+        &mut self.registers
+    }
     /// Executes the loaded program.
     /// # Errors
     /// - See [`ExecutionError`]
     pub fn execute(&mut self) -> Result<(), ExecutionError> {
-        let mut stdout = io::stdout().lock();
-        let _lock = terminal::set_terminal_raw(&io::stdin());
+        let mut stdout = io::stdout();
+        let _lock = terminal::set_terminal_raw(&mut stdout);
         self.execute_with_stdout(&mut stdout)
     }
 
@@ -147,7 +153,13 @@ impl Emulator {
             .map(|bits| Instruction::from(*bits))
     }
 
-    fn execute_with_stdout(&mut self, stdout: &mut impl Write) -> Result<(), ExecutionError> {
+    /// Executes the loaded program.
+    /// # Errors
+    /// - See [`ExecutionError`]
+    pub fn execute_with_stdout(
+        &mut self,
+        stdout: &mut (impl Write + CrosstermCompatibility),
+    ) -> Result<(), ExecutionError> {
         while self.registers.pc() < from_binary(self.memory.program_end()) {
             let data = self.memory[self.registers.pc().as_binary()];
             let i = Instruction::from(data);
@@ -157,9 +169,9 @@ impl Emulator {
                 return res;
             }
         }
-        stdout.flush().map_err(|e| {
-            ExecutionError::IOInputOutputError(format!("Error flushing stdout: {e}"))
-        })?;
+        // stdout.flush().map_err(|e| {
+        //     ExecutionError::IOInputOutputError(format!("Error flushing stdout: {e}"))
+        // })?;
         Ok(())
     }
 
@@ -170,7 +182,7 @@ impl Emulator {
     fn execute_instruction(
         &mut self,
         instruction: Instruction,
-        stdout: &mut impl Write,
+        stdout: &mut (impl Write + CrosstermCompatibility),
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         if self.keyboard_input_provider.borrow().is_interrupted() {
             return ControlFlow::Break(Ok(()));
@@ -224,16 +236,16 @@ impl Emulator {
     pub fn trap(
         &mut self,
         i: Instruction,
-        mut stdout: impl Write,
+        stdout: &mut (impl Write + CrosstermCompatibility),
     ) -> ControlFlow<Result<(), ExecutionError>, ()> {
         let trap_routine = i.get_bit_range(0, 7);
         match trap_routine {
-            0x20 => trap_routines::get_c(&mut self.registers, &self.memory, &mut stdout),
-            0x21 => trap_routines::out(&self.registers, &mut stdout),
-            0x22 => trap_routines::put_s(&self.registers, &self.memory, &mut stdout),
-            0x23 => trap_routines::in_trap(&mut self.registers, &self.memory, &mut stdout),
-            0x24 => trap_routines::put_sp(&self.registers, &self.memory, &mut stdout),
-            0x25 => trap_routines::halt(&mut stdout),
+            0x20 => trap_routines::get_c(&mut self.registers, &self.memory, stdout),
+            0x21 => trap_routines::out(&self.registers, stdout),
+            0x22 => trap_routines::put_s(&self.registers, &self.memory, stdout),
+            0x23 => trap_routines::in_trap(&mut self.registers, &self.memory, stdout),
+            0x24 => trap_routines::put_sp(&self.registers, &self.memory, stdout),
+            0x25 => trap_routines::halt(stdout),
             tr => ControlFlow::Break(Err(ExecutionError::UnknownTrapRoutine(tr))),
         }
     }

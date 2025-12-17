@@ -1,5 +1,6 @@
 use crate::emulator;
 use crate::emulator::Emulator;
+use crate::emulator::stdout_helpers::CrosstermCompatibility;
 use crate::hardware::keyboard::KeyboardInputProvider;
 use crate::hardware::memory::Memory;
 use crate::hardware::registers::Registers;
@@ -24,6 +25,11 @@ impl StringWriter {
     }
     pub fn get_string(&self) -> String {
         String::from_utf8(self.vec.clone()).unwrap()
+    }
+}
+impl CrosstermCompatibility for StringWriter {
+    fn will_block_on_size_or_position_queries(&self) -> bool {
+        true
     }
 }
 

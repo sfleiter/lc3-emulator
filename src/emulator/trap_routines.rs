@@ -3,6 +3,7 @@
 //!
 //! In the real system the code for these routines is at the target of the
 //! [Trap Vector Tables](https://cs131.info/Assembly/Instructions/TRAPRoutines.html#trap-vector-table).
+use crate::emulator::stdout_helpers::CrosstermCompatibility;
 use crate::errors::ExecutionError;
 use crate::hardware::memory::{Memory, MemoryMappedIOLocations};
 use crate::hardware::registers::{Registers, from_binary};
@@ -18,7 +19,7 @@ fn read_character_from_console(
     regs: &mut Registers,
     eo: EchoOptions,
     memory: &Memory,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     loop {
         if memory[MemoryMappedIOLocations::Kbsr as u16] != 0 {
@@ -44,7 +45,7 @@ fn read_character_from_console(
 pub fn get_c(
     regs: &mut Registers,
     memory: &Memory,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     read_character_from_console(regs, EchoOptions::EchoOff, memory, stdout)
 }
@@ -55,14 +56,17 @@ pub fn get_c(
 pub fn in_trap(
     regs: &mut Registers,
     memory: &Memory,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     write_str_out("Input: ", stdout)?;
     read_character_from_console(regs, EchoOptions::EchoOn, memory, stdout)
 }
 
 /// OUT: Write a character in R0\[7:0\] to the console display.
-pub fn out(regs: &Registers, stdout: &mut impl Write) -> ControlFlow<Result<(), ExecutionError>> {
+pub fn out(
+    regs: &Registers,
+    stdout: &mut (impl Write + CrosstermCompatibility),
+) -> ControlFlow<Result<(), ExecutionError>> {
     let c: char = (regs.get(0).as_binary() & 0xFF) as u8 as char;
     write_str_out(&String::from(c), stdout)
 }
@@ -92,7 +96,7 @@ fn put_two_chars_per_u16(input: u16, append_to: &mut String) {
 fn put(
     regs: &Registers,
     mem: &Memory,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
     handle_char: fn(u16, &mut String),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     let address = regs.get(0).as_binary();
@@ -109,7 +113,7 @@ fn put(
 pub fn put_s(
     regs: &Registers,
     mem: &Memory,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     put(regs, mem, stdout, put_one_char_per_u16)
 }
@@ -122,20 +126,22 @@ pub fn put_s(
 pub fn put_sp(
     regs: &Registers,
     mem: &Memory,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     put(regs, mem, stdout, put_two_chars_per_u16)
 }
 
 /// HALT: End program and stdout a message
-pub fn halt(stdout: &mut impl Write) -> ControlFlow<Result<(), ExecutionError>> {
+pub fn halt(
+    stdout: &mut (impl Write + CrosstermCompatibility),
+) -> ControlFlow<Result<(), ExecutionError>> {
     write_str_out("\nProgram halted\n", stdout)?;
     ControlFlow::Break(Ok(()))
 }
 
 fn write_str_out(
     message: &str,
-    stdout: &mut impl Write,
+    stdout: &mut (impl Write + CrosstermCompatibility),
 ) -> ControlFlow<Result<(), ExecutionError>> {
     match terminal::print(stdout, message) {
         Ok(()) => ControlFlow::Continue(()),
@@ -165,8 +171,8 @@ mod tests {
     #[gtest]
     pub fn test_get_c() {
         let mut emu = FakeEmulator::new(&[0u16; 0], "a");
-        let (regs, mem, mut writer) = emu.get_parts();
-        let res = get_c(regs, mem, &mut writer);
+        let (regs, mem, writer) = emu.get_parts();
+        let res = get_c(regs, mem, writer);
         check_register_value(regs, 0, u16::from(b'a'));
         assert_that!(res, eq(&ControlFlow::Continue(())));
     }

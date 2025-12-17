@@ -28,7 +28,7 @@ impl TerminalInputProvider {
 }
 impl KeyboardInputProvider for TerminalInputProvider {
     fn check_input_available(&mut self) -> io::Result<bool> {
-        if poll(Duration::from_secs(0))?
+        if poll(Duration::from_millis(100))?
             && let Some(event) = read()?.as_key_press_event()
             && let Some(c) = event.code.as_char()
         {
