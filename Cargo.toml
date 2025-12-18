@@ -14,6 +14,7 @@ edition = "2024"
 # https://releases.rs/#rust-versions
 # at least half a year, 1.88.0 from 26 June 2025
 rust-version = "1.88.0"
+publish = false
 
 [lints.clippy]
 pedantic = "warn"

@@ -1,0 +1,32 @@
+on:
+  release:
+    types: [ published ]
+  # workflow_dispatch:
+  #   inputs:
+
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+jobs:
+  release:
+    name: Create a release
+    runs-on: [ ubuntu-latest ]
+    steps:
+      - uses: ./.github/workflows/rust-build-workflow_call.yml
+        with:
+          build-profile: release
+          oses: '[ "windows-latest", "macos-latest", "ubuntu-latest", "ubuntu-{0}-arm" ]'
+
+  #           # Build the FeedMD CLI utility, and upload to the release that triggered the workflow
+  #           - name: '📦 Package windows x64'
+  #         run: |
+  #           cd ${{github.workspace}}
+  #           dotnet publish feedmd.csproj -r win-x64 -c Release -o bin/win-x64
+  #           zip -r feedmd-win-x64.zip bin/win-x64 -j
+  #           gh release upload ${{github.event.release.tag_name}} feedmd-win-x64.zip
+  #         env:
+  #           GITHUB_TOKEN: ${{ github.TOKEN }}
+  #         shell: bash
+
+
