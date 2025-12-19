@@ -27,13 +27,16 @@ on:
           - '[ "windows-latest", "macos-latest", "ubuntu-latest" ]'
 env:
   CARGO_TERM_COLOR: always
-  BUILD_PROFILE: ${{ inputs.build-profile == '' && 'dev' || inputs.build-profile }}
 jobs:
   build:
     strategy:
       matrix:
         os: ${{ fromJSON(inputs.oses == '' && '["ubuntu-latest"]' || inputs.oses) }}
     name: Build, Test and verify with rustfmt as well as Clippy
+    env:
+      BUILD_PROFILE: ${{ inputs.build-profile == '' && 'dev' || inputs.build-profile }}
+      EXECUTABLE_DIR: target/${{ ((inputs.build-profile == '' ) || (inputs.build-profile == 'dev')) && 'debug' || 'release' }}
+      EXECUTABLE_NAME: ${{ github.event.repository.name }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -49,6 +52,14 @@ jobs:
         run: cargo test
       - name: Build
         run: cargo build --profile ${{ env.BUILD_PROFILE }}
+      - name: Upload Artifact
+        env:
+          EXECUTABLE_SUFFIX: ${{ runner.os == 'Windows' && '.exe' || '' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.EXECUTABLE_NAME }}-${{matrix.os}}${{ env.EXECUTABLE_SUFFIX }}
+          path: ${{ env.EXECUTABLE_DIR }}/${{ env.EXECUTABLE_NAME }}${{ env.EXECUTABLE_SUFFIX }}
+          if-no-files-found: error
   msrv:
     name: Verify Minimum Stable Rust Version (MSRV) guarantee
     runs-on: ubuntu-latest
