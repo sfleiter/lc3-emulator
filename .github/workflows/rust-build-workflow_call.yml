@@ -1,42 +1,42 @@
-name: Build (main)
+name: Build (main) - workflow_call
+env:
+  CARGO_TERM_COLOR: always
+  UBUNTU_ARM_VERSION: 24.04
 permissions:
   contents: read
 on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
+  workflow_call:
     inputs:
       build-profile:
         description: Cargo profile to use for build command
-        default: release
         required: true
-        type: choice
-        options:
-          - dev
-          - release
+        type: string
       oses:
         description: The OSes to build on
-        default: '[ "windows-latest", "macos-latest", "ubuntu-latest" ]'
         required: true
-        type: choice
-        options:
-          - '[ "ubuntu-latest" ]'
-          - '[ "windows-latest", "macos-latest" ]'
-          - '[ "windows-latest", "macos-latest", "ubuntu-latest" ]'
-env:
-  CARGO_TERM_COLOR: always
+        type: string
 jobs:
+  replace-ubuntu-arm-version:
+    # No latest available for ubuntu arm, see https://github.com/orgs/community/discussions/148648#discussioncomment-11858287
+    runs-on: ubuntu-latest
+    outputs:
+      OSES: ${{ steps.os-arr-gen.outputs.oses }}
+    steps:
+      - id: os-arr-gen
+        env:
+          OSES_TO_BUILD_ON: ${{ format(inputs.oses, env.UBUNTU_ARM_VERSION ) }}
+        run: |
+          echo "oses=$OSES_TO_BUILD_ON" >> "$GITHUB_OUTPUT"
   build:
+    needs: replace-ubuntu-arm-version
     strategy:
       matrix:
-        os: ${{ fromJSON(inputs.oses == '' && '["ubuntu-latest"]' || inputs.oses) }}
+        os: ${{ fromJSON(needs.replace-ubuntu-arm-version.outputs.OSES) }}
     name: Build, Test and verify with rustfmt as well as Clippy
     env:
-      BUILD_PROFILE: ${{ inputs.build-profile == '' && 'dev' || inputs.build-profile }}
-      EXECUTABLE_DIR: target/${{ ((inputs.build-profile == '' ) || (inputs.build-profile == 'dev')) && 'debug' || 'release' }}
+      DEBUG_OR_RELEASE: ${{ ((inputs.build-profile == '' ) || (inputs.build-profile == 'dev')) && 'debug' || 'release' }}
       EXECUTABLE_NAME: ${{ github.event.repository.name }}
+      # NEEDS_CONTEXT: ${{ toJSON(needs) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -51,14 +51,14 @@ jobs:
       - name: Run tests
         run: cargo test
       - name: Build
-        run: cargo build --profile ${{ env.BUILD_PROFILE }}
+        run: cargo build --profile ${{ inputs.build-profile }}
       - name: Upload Artifact
         env:
           EXECUTABLE_SUFFIX: ${{ runner.os == 'Windows' && '.exe' || '' }}
         uses: actions/upload-artifact@v6
         with:
-          name: ${{ env.EXECUTABLE_NAME }}-${{matrix.os}}${{ env.EXECUTABLE_SUFFIX }}
-          path: ${{ env.EXECUTABLE_DIR }}/${{ env.EXECUTABLE_NAME }}${{ env.EXECUTABLE_SUFFIX }}
+          name: ${{ env.EXECUTABLE_NAME }}-${{runner.os}}-${{ runner.arch }}-${{ env.DEBUG_OR_RELEASE }}${{ env.EXECUTABLE_SUFFIX }}
+          path: target/${{ env.DEBUG_OR_RELEASE }}/${{ env.EXECUTABLE_NAME }}${{ env.EXECUTABLE_SUFFIX }}
           if-no-files-found: error
   msrv:
     name: Verify Minimum Stable Rust Version (MSRV) guarantee

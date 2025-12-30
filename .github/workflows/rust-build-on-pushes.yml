@@ -1,0 +1,16 @@
+name: Build (main) - on pushes
+env:
+  CARGO_TERM_COLOR: always
+permissions:
+  contents: read
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+jobs:
+  call-rust-build-workflow_call:
+    uses: ./.github/workflows/rust-build-workflow_call.yml
+    with:
+      build-profile: 'dev'
+      oses: '[ "ubuntu-latest" ]'

@@ -1,0 +1,33 @@
+name: Build (main) - manual
+env:
+  CARGO_TERM_COLOR: always
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+    inputs:
+      build-profile:
+        description: Cargo profile to use for build command
+        default: release
+        required: true
+        type: choice
+        options:
+          - dev
+          - release
+      oses:
+        description: The OSes to build on
+        # No latest available for ubuntu arm, see https://github.com/orgs/community/discussions/148648#discussioncomment-11858287
+        default: '[ "windows-latest", "macos-latest", "ubuntu-latest", "ubuntu-{0}-arm" ]'
+        required: true
+        type: choice
+        options:
+          - '[ "ubuntu-{0}-arm" ]'
+          - '[ "ubuntu-latest" ]'
+          - '[ "windows-latest", "macos-latest", "ubuntu-{0}-arm" ]'
+          - '[ "windows-latest", "macos-latest", "ubuntu-latest", "ubuntu-{0}-arm" ]'
+jobs:
+  call-rust-build-workflow_call:
+    uses: ./.github/workflows/rust-build-workflow_call.yml
+    with:
+      oses: ${{ inputs.oses }}
+      build-profile: ${{ inputs.build-profile }}
