@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] - ReleaseDate
 
+## [0.5.0] - 2026-01-02
+
 ### Added
 
 - Initial Release
@@ -18,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 <summary>GitHub compare links</summary>
 
 <!-- next-url -->
-- [Unreleased](https://github.com/sfleiter/lc3-emulator/compare/14d8431...HEAD)
+- [Unreleased](https://github.com/sfleiter/lc3-emulator/compare/v0.5.0...HEAD)
+- [0.5.0](https://github.com/sfleiter/lc3-emulator/compare/14d8431...v0.5.0)
 
 </details>
