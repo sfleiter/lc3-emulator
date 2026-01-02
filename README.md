@@ -115,3 +115,16 @@ to improve this project I am happy for every filed issue on that, though.
   - Manual
     - Cross compilation to ppc64 and running tests for making sure this works for Big Endian systems  
 </details>
+
+## Releasing
+
+This project uses [`cargo release`](https://github.com/crate-ci/cargo-release/).
+A release is triggered via
+```shell
+ cargo release [--execute] LEVEL | VERSION
+```
+
+If using [Jujutsu (jj)](https://www.jj-vcs.dev/latest/) checkout main before that
+```shell
+git checkout main
+```

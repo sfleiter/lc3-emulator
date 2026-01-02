@@ -1,32 +1,72 @@
+# Sources:
+# - https://github.com/crate-ci/cargo-release/blob/master/docs/faq.md#how-do-i-automate-creating-a-release-on-github
+# - https://raw.githubusercontent.com/crate-ci/typos/5c92dc6f8cc68b9d1c8cb1e8840b81e78cf7f65d/.github/workflows/post-release.yml
+name: Release a new version on GitHub
 on:
-  release:
-    types: [ published ]
-  # workflow_dispatch:
-  #   inputs:
-
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        type: boolean
+        default: true
+        description: Create a prerelease
+      release-version:
+        type: string
+        required: true
+        default: v
+        description: release version according to semver starting with v
 permissions:
   contents: write
 env:
   CARGO_TERM_COLOR: always
+  RELEASE_VERSION: ${{ inputs.release-version }}
 jobs:
-  release:
-    name: Create a release
-    runs-on: [ ubuntu-latest ]
+  build-all-targets:
+    name: Build all targets
+    uses: ./.github/workflows/rust-build-workflow_call.yml
+    with:
+      build-profile: release
+      oses: '[ "windows-latest", "macos-latest", "ubuntu-latest", "ubuntu-{0}-arm" ]'
+  create-release:
+    name: create-release
+    runs-on: ubuntu-latest
+    needs: build-all-targets
+    env:
+      ARTIFACT_DIR: release-artifacts
     steps:
-      - uses: ./.github/workflows/rust-build-workflow_call.yml
+      - name: Get the release version from the tag
+        shell: bash
+        if: env.RELEASE_VERSION == ''
+        run: |
+          # See: https://github.community/t5/GitHub-Actions/How-to-get-just-the-tag-name/m-p/32167/highlight/true#M1027
+          echo "RELEASE_VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          echo "version is: ${{ env.RELEASE_VERSION }}"
+      - name: Checkout repository
+        uses: actions/checkout@v6
         with:
-          build-profile: release
-          oses: '[ "windows-latest", "macos-latest", "ubuntu-latest", "ubuntu-{0}-arm" ]'
-
-  #           # Build the FeedMD CLI utility, and upload to the release that triggered the workflow
-  #           - name: '📦 Package windows x64'
-  #         run: |
-  #           cd ${{github.workspace}}
-  #           dotnet publish feedmd.csproj -r win-x64 -c Release -o bin/win-x64
-  #           zip -r feedmd-win-x64.zip bin/win-x64 -j
-  #           gh release upload ${{github.event.release.tag_name}} feedmd-win-x64.zip
-  #         env:
-  #           GITHUB_TOKEN: ${{ github.TOKEN }}
-  #         shell: bash
-
-
+          sparse-checkout: |
+            CHANGELOG.md
+            .github/workflows/release-notes.py
+            .git
+          # checkout of .git needed because of issue https://github.com/cli/cli/issues/9072
+      - name: Generate Release Notes
+        run: |
+          ./.github/workflows/release-notes.py --tag ${{ env.RELEASE_VERSION }} --output notes-${{ env.RELEASE_VERSION }}.md
+          cat notes-${{ env.RELEASE_VERSION }}.md
+      - id: download-build-artifacts
+        uses: actions/download-artifact@v5
+        with:
+          run-id: ${{ needs.build-all-targets.outputs.run-id }}
+          path: ${{ env.ARTIFACT_DIR }}
+          merge-multiple: true
+          pattern: ${{ github.event.repository.name }}-*
+      - name: Display downloaded files
+        run: |
+          ls -Rla $ARTIFACT_DIR
+      - name: Create Release on GitHub and upload files
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create ${{ inputs.prerelease && '-p' || '' }} --fail-on-no-commits --notes-file notes-${{ env.RELEASE_VERSION }}.md ${{ env.RELEASE_VERSION }} ${{ env.ARTIFACT_DIR }}/*

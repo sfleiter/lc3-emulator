@@ -15,6 +15,10 @@ on:
         description: The OSes to build on
         required: true
         type: string
+    outputs:
+      run-id:
+        value: ${{ github.run_id }}
+        description: run id which can be used for downloading artifacts uploaded by this workflow
 jobs:
   replace-ubuntu-arm-version:
     # No latest available for ubuntu arm, see https://github.com/orgs/community/discussions/148648#discussioncomment-11858287
@@ -52,13 +56,19 @@ jobs:
         run: cargo test
       - name: Build
         run: cargo build --profile ${{ inputs.build-profile }}
+      - name: Rename Artifact
+        id: rename-artifact
+        env:
+          EXECUTABLE_SUFFIX: ${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: mv target/${{ env.DEBUG_OR_RELEASE }}/${{ env.EXECUTABLE_NAME }}${{ env.EXECUTABLE_SUFFIX }} target/${{ env.EXECUTABLE_NAME }}-${{runner.os}}-${{ runner.arch }}-${{ env.DEBUG_OR_RELEASE }}${{ env.EXECUTABLE_SUFFIX }}
       - name: Upload Artifact
+        id: upload-artifact
         env:
           EXECUTABLE_SUFFIX: ${{ runner.os == 'Windows' && '.exe' || '' }}
         uses: actions/upload-artifact@v6
         with:
           name: ${{ env.EXECUTABLE_NAME }}-${{runner.os}}-${{ runner.arch }}-${{ env.DEBUG_OR_RELEASE }}${{ env.EXECUTABLE_SUFFIX }}
-          path: target/${{ env.DEBUG_OR_RELEASE }}/${{ env.EXECUTABLE_NAME }}${{ env.EXECUTABLE_SUFFIX }}
+          path: target/${{ env.EXECUTABLE_NAME }}-${{runner.os}}-${{ runner.arch }}-${{ env.DEBUG_OR_RELEASE }}${{ env.EXECUTABLE_SUFFIX }}
           if-no-files-found: error
   msrv:
     name: Verify Minimum Stable Rust Version (MSRV) guarantee
