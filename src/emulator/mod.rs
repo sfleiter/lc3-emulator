@@ -126,9 +126,15 @@ fn get_file_with_size(path: &str) -> Result<(File, u64), io::Error> {
 }
 
 impl Emulator {
+    /// Access registers to set them before execution or query values afterward.
     #[must_use]
     pub const fn registers(&mut self) -> &mut Registers {
         &mut self.registers
+    }
+    /// Access memory to set provide data before execution or query results afterward.
+    #[must_use]
+    pub const fn memory(&mut self) -> &mut Memory {
+        &mut self.memory
     }
     /// Executes the loaded program.
     /// # Errors

@@ -38,6 +38,11 @@ See the [rustdoc documentation](https://sfleiter.github.io/lc3-emulator/),
 f.e. on [trap routines](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/trap_routines/index.html)
 or [opcodes](https://sfleiter.github.io/lc3-emulator/lc3_emulator/emulator/opcodes/index.html).
 
+For usage as a library in your own project, add this in your `dependencies` section of Cargo.toml.
+```toml
+lc3-emulator = { git = "https://github.com/sfleiter/lc3-emulator.git" }
+```
+
 ## Contributing
 
 As this is a learning project for myself I do **not** plan to accept pull requests. If you see issues or have ideas how
