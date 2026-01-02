@@ -1,5 +1,14 @@
 [package]
 name = "lc3-emulator"
+description = "Emulator for the Little Computer 3 (LC-3)"
+homepage = "https://github.com/sfleiter/lc3-emulator"
+documentation = "https://sfleiter.github.io/lc3-emulator/"
+readme = "README.md"
+repository = "https://github.com/sfleiter/lc3-emulator"
+keywords = ["emulator", "lc3", "lc-3"]
+categories = ["emulators", "command-line-utilities"]
+license = "MIT"
+authors = ["Stefan Fleiter"]
 version = "0.1.0"
 edition = "2024"
 # https://releases.rs/#rust-versions
